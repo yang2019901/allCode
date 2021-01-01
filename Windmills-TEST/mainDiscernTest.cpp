@@ -27,16 +27,33 @@ int main()
     setIdentity(KF.errorCovPost, Scalar::all(1));//P后验误差估计协方差矩阵，初始化为单位阵
     randn(KF.statePost, Scalar::all(0), Scalar::all(0.1));//初始化状态为随机值
 
-    for(;;){
+    for(;;)
+    {
         cap.read(image);
-
-        // image.copyTo(binary);
-        // resize(image,image,Size(image.cols*0.5,binary.rows*0.5));
-        // resize(binary,binary,Size(binary.cols*0.5,binary.rows*0.5));
+        
+        image.copyTo(binary);
+        resize(image,image,Size(image.cols*0.5,binary.rows*0.5));
+        resize(binary,binary,Size(binary.cols*0.5,binary.rows*0.5));
 
         // cvtColor(image,image,COLOR_BGR2GRAY);
 
-        threshold(image, image, 80, 255, THRESH_BINARY);        //阈值要自己调
+        // 2B-G-R 计算蓝色程度
+        Mat grey(image.rows, image.cols, CV_8UC1);
+        for (int i = 0; i < image.rows; i++)
+            for (int j = 0; j < image.cols; j++)
+            {
+                // 获得像素点的颜色
+                Vec3b &pixel_color = image.at<Vec3b>(i, j);
+                // 计算绿色程度
+                int rate = pixel_color[0] * 2 - pixel_color[1] - pixel_color[2];
+                if (rate < 0)
+                    rate = 0;
+                if (rate > 255)
+                    rate = 255;
+                grey.at<uchar>(i, j) = rate;
+            }
+        
+        threshold(grey, image, 80, 255, THRESH_BINARY);        //阈值要自己调
 
         dilate(image,image,Mat());
         dilate(image,image,Mat());
