@@ -1,0 +1,28 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "D:/opencv4.4.0/build/x64/mingw/install/include",
+                "D:/MinGW/mingw64/lib/gcc/x86_64-w64-mingw32/8.1.0",
+                "D:/MinGW/mingw64/lib/gcc/x86_64-w64-mingw32/lib",
+                "D:/MinGW/mingw64/lib/gcc/x86_64-w64-mingw32/8.1.0/include",
+                "D:/MinGW/mingw64/lib/gcc/x86_64-w64-mingw32/8.1.0/include/ssp",
+                "D:/MinGW/mingw64/lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++/x86_64-w64-mingw32/bits",
+                "D:/MinGW/mingw64/lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++/x86_64-w64-mingw32/ext",
+                "D:/MinGW/mingw64/lib/gcc/x86_64-w64-mingw32/8.1.0/include/c++"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "D:\\MinGW\\mingw64\\bin\\g++.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}
