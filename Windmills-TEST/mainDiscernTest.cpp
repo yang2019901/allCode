@@ -78,11 +78,28 @@ int main()
                 Point2f vertex[4];
                 box.points(vertex);
                 for (int i = 0; i < 4; i++)
-                    line(image, vertex[i], vertex[(i+1)%4], Scalar(0,0,255),2, LINE_AA);
+                    line(image, vertex[i], vertex[(i+1)%4], Scalar(0,255,0),2, LINE_AA);
                 center = (vertex[0] + vertex[2]) / 2;
                 putText(image, "target", vertex[0], FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255,255,0));
+                try
+                {
+                    cv::circle(image, Point(center.x, center.y), 15, cv::Scalar(0, 0, 255), 4); //circle the target
+                    Mat prediction = KF.predict();
+                    Point predict_pt = Point((int)prediction.at<float>(0), (int)prediction.at<float>(1));
+                    measurement.at<float>(0) = (float)center.x;
+                    measurement.at<float>(1) = (float)center.y;
+                    KF.correct(measurement);
+
+                    circle(image, predict_pt, 3, Scalar(34, 255, 255), -1);
+
+                    center.x = (int)prediction.at<float>(0);
+                    center.y = (int)prediction.at<float>(1);
+                }catch(exception e){
+                    cout << "Kalman filter failed\n";
+                }
             }
         }
+        { 
         // for (size_t i = 0; i < contours.size(); i++)
         // {
 
@@ -141,8 +158,11 @@ int main()
         //         }
         //     }
         // }
+        }
+
         imshow("frame",binary);
         imshow("Original", image);
-        waitKey(0);
+        if(waitKey(30) == 'q')
+            break;
     }
 }
