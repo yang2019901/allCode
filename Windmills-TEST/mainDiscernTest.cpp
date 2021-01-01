@@ -106,6 +106,6 @@ int main()
         }
         imshow("frame",binary);
         imshow("Original", image);
-        waitKey(1);
+        waitKey(0);
     }
 }
