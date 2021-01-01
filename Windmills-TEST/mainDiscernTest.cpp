@@ -1,10 +1,11 @@
 #include <iostream>
 #include "opencv2/opencv.hpp"
 #include <math.h>
-
+#include <chrono>
 
 using namespace std;
 using namespace cv;
+using namespace chrono;
 
 
 int main()
@@ -30,7 +31,9 @@ int main()
     for(;;)
     {
         cap.read(image);
-        
+        // Test time cost:
+        auto start = system_clock::now();
+
         image.copyTo(binary);
         resize(image,image,Size(image.cols*0.5,binary.rows*0.5));
         resize(binary,binary,Size(binary.cols*0.5,binary.rows*0.5));
@@ -47,7 +50,7 @@ int main()
                 // 获得像素点的颜色
                 Vec3b &pixel_color = binary.at<Vec3b>(i, j);
                 // 计算绿色程度
-                int rate = pixel_color[0] * 1.5 - 0.5 * pixel_color[1] - pixel_color[2];
+                int rate = pixel_color[0] - 0.5 * pixel_color[1] - 0.5 * pixel_color[2];
                 if (rate < 0)
                     rate = 0;
                 if (rate > 255)
@@ -55,7 +58,7 @@ int main()
                 grey.at<uchar>(i, j) = rate;
             }
         }
-        medianBlur(binary,binary,3);
+        // medianBlur(binary,binary,3);
         threshold(grey, binary, 120, 255, THRESH_BINARY);        //阈值要自己调
         imshow("blue discern", grey);
         Mat element = getStructuringElement(MORPH_RECT, Size(3,3));
@@ -90,7 +93,7 @@ int main()
                     measurement.at<float>(1) = (float)center.y;
                     KF.correct(measurement);
 
-                    circle(image, predict_pt, 3, Scalar(34, 255, 255), -1);
+                    circle(image, predict_pt, 3, Scalar(34, 255, 255), -1);  //yellow dot indicates the predicted position
 
                     center.x = (int)prediction.at<float>(0);
                     center.y = (int)prediction.at<float>(1);
@@ -159,10 +162,12 @@ int main()
         //     }
         // }
         }
-
+        auto end = system_clock::now();
+        auto duration = duration_cast<microseconds>(end - start);
+        printf("time cost: %lf ms\n", duration.count()/1000.0);
         imshow("frame",binary);
         imshow("Original", image);
-        if(waitKey(30) == 'q')
+        if(waitKey(10) == 'q')
             break;
     }
 }
