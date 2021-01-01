@@ -7,7 +7,7 @@
     "editor.fontFamily": "consolas",
     "editor.formatOnPaste": true,
     "editor.multiCursorModifier": "ctrlCmd",
-    "editor.snippetSuggestions": "top",
+    "editor.snippetSuggestions": "bottom",
     "editor.cursorStyle": "line",
     "kite.showWelcomeNotificationOnStartup": false,
     "editor.mouseWheelZoom": true,
