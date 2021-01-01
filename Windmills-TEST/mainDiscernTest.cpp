@@ -30,11 +30,11 @@ int main()
     for(;;){
         cap.read(image);
 
-        image.copyTo(binary);
-        resize(image,image,Size(image.cols*0.5,binary.rows*0.5));
-        resize(binary,binary,Size(binary.cols*0.5,binary.rows*0.5));
+        // image.copyTo(binary);
+        // resize(image,image,Size(image.cols*0.5,binary.rows*0.5));
+        // resize(binary,binary,Size(binary.cols*0.5,binary.rows*0.5));
 
-        cvtColor(image,image,COLOR_BGR2GRAY);
+        // cvtColor(image,image,COLOR_BGR2GRAY);
 
         threshold(image, image, 80, 255, THRESH_BINARY);        //阈值要自己调
 
