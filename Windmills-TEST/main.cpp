@@ -1,11 +1,17 @@
-#include <iostream>
-#include "opencv2/opencv.hpp"
-#include <math.h>
+//////////////////////////////////////////////////////////////////
+//// Important: try best not to use copying function.
+////    Instead, initialze Mat object by calling it 
+////    as "dstImage" of function like "cvtColor",etc.
+//////////////////////////////////////////////////////////////////
 
+#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <math.h>
+#include <chrono>
 
 using namespace std;
 using namespace cv;
-
+using namespace chrono;
 
 int main()
 {
@@ -29,32 +35,33 @@ int main()
 
     for(;;){
         cap.read(image);
+        Mat binary;
 
-        image.copyTo(binary);
-        resize(image,image,Size(image.cols*0.5,binary.rows*0.5));
-        resize(binary,binary,Size(binary.cols*0.5,binary.rows*0.5));
+        auto start = system_clock::now();
+        resize(image,image,Size(640,480));   // costs 2ms
+        cvtColor(image,binary,COLOR_BGR2GRAY);      // around 1ms sometimes 1.5ms
+        threshold(binary,binary, 80, 255, THRESH_BINARY);  // no time   //阈值要自己调
+        // auto end = system_clock::now();
 
-        cvtColor(image,image,COLOR_BGR2GRAY);
+        dilate(binary,binary,Mat());   // sometimes 1ms about these two operations
+        dilate(binary,binary,Mat());
 
-        threshold(image, image, 80, 255, THRESH_BINARY);        //阈值要自己调
+        floodFill(binary,Point(5,50),Scalar(255),0,FLOODFILL_FIXED_RANGE);// around 1ms
 
-        dilate(image,image,Mat());
-        dilate(image,image,Mat());
-
-        floodFill(image,Point(5,50),Scalar(255),0,FLOODFILL_FIXED_RANGE);
-
-        threshold(image, image, 80, 255, THRESH_BINARY_INV);
-
+        threshold(binary, binary, 80, 255, THRESH_BINARY_INV);
         vector<vector<Point>> contours;
-        findContours(image, contours, RETR_LIST, CHAIN_APPROX_NONE);
+        findContours(binary, contours, RETR_LIST, CHAIN_APPROX_NONE); // sometimes 1ms
+        
+        // the "for" loop overall costs 1 ms
         for (size_t i = 0; i < contours.size(); i++){
 
             vector<Point> points;
             double area = contourArea(contours[i]);
             if (area < 50 || 1e4 < area) continue;
-            drawContours(image, contours, static_cast<int>(i), Scalar(0), 2);
+            drawContours(binary, contours, static_cast<int>(i), Scalar(0), 2);
 
             points = contours[i];
+        
             RotatedRect rrect = fitEllipse(points);
             cv::Point2f* vertices = new cv::Point2f[4];
             rrect.points(vertices);
@@ -63,7 +70,7 @@ int main()
             if(aim > 1.7 && aim < 2.6){
                 for (int j = 0; j < 4; j++)
                 {
-                    cv::line(binary, vertices[j], vertices[(j + 1) % 4], cv::Scalar(0, 255, 0),4);
+                    cv::line(image, vertices[j], vertices[(j + 1) % 4], cv::Scalar(0, 255, 0),4);
                 }
                 float middle = 100000;
 
@@ -88,7 +95,7 @@ int main()
                     }
                 }
                 if( middle > 60){                               //这个距离也要根据实际情况调,和图像尺寸和物体远近有关。
-                    cv::circle(binary,Point(rrect.center.x,rrect.center.y),15,cv::Scalar(0,0,255),4);
+                    cv::circle(image,Point(rrect.center.x,rrect.center.y),15,cv::Scalar(0,0,255),4);
                     Mat prediction = KF.predict();
                     Point predict_pt = Point((int)prediction.at<float>(0), (int)prediction.at<float>(1));
 
@@ -96,7 +103,7 @@ int main()
                     measurement.at<float>(1) = (float)rrect.center.y;
                     KF.correct(measurement);
 
-                    circle(binary, predict_pt, 3, Scalar(34, 255, 255), -1);
+                    circle(image, predict_pt, 3, Scalar(34, 255, 255), -1);
 
                     rrect.center.x = (int)prediction.at<float>(0);
                     rrect.center.y = (int)prediction.at<float>(1);
@@ -104,8 +111,14 @@ int main()
                 }
             }
         }
-        imshow("frame",binary);
-        imshow("Original", image);
-        waitKey(1);
+
+        auto end = system_clock::now();
+        auto duration = duration_cast<microseconds>(end - start);
+        printf("time cost: %lf ms\n", duration.count() / 1000.0);
+
+        imshow("frame",image);
+        imshow("Original", binary);
+        if (waitKey(1) == 'q')
+            break;
     }
 }

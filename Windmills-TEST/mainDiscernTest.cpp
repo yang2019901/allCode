@@ -1,3 +1,9 @@
+/////////////////////////
+///     DESERTED    /////
+/////////////////////////
+
+// high time cost. optimization failed!
+
 #include <iostream>
 #include "opencv2/opencv.hpp"
 #include <math.h>
@@ -12,7 +18,7 @@ int main()
 {
     VideoCapture cap("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind.mp4");
     Mat image,binary;
-    int stateNum = 4;
+    int stateNum = 4;       
     int measureNum = 2;
     KalmanFilter KF(stateNum, measureNum, 0);
     //Mat processNoise(stateNum, 1, CV_32F);
@@ -32,6 +38,7 @@ int main()
     {
         cap.read(image);
         // Test time cost:
+        
         auto start = system_clock::now();
 
         image.copyTo(binary);
@@ -41,7 +48,9 @@ int main()
         //blue light discern:
 
         medianBlur(binary, binary, 3);
-        // 2B-G-R 计算蓝色程度
+        // // 2B-G-R 计算蓝色程度
+
+        // NOTE: Damn it! the double loops cost 3-4 ms in my machine(i5-9300H GTX1650)! Quit using it!
         Mat grey(binary.rows, binary.cols, CV_8UC1);
         for (int i = 0; i < binary.rows; i++)
         {
@@ -58,15 +67,21 @@ int main()
                 grey.at<uchar>(i, j) = rate;
             }
         }
-        medianBlur(binary,binary,3);
+        medianBlur(grey,grey,3);
+        // Mat hsvImage;
+        // cvtColor(image, hsvImage, COLOR_BGR2HSV);
+        // inRange(hsvImage,Scalar(100, 150,150),Scalar(124,255,255),binary);
+        auto end = system_clock::now();
         threshold(grey, binary, 150, 255, THRESH_BINARY);        //阈值要自己调
-        imshow("blue discern", grey);
+        imshow("blue discern", binary);
         Mat element = getStructuringElement(MORPH_RECT, Size(3,3));
-        morphologyEx(binary,binary,MORPH_CLOSE,element);
+        // morphologyEx(binary,binary,MORPH_CLOSE,element);
+        dilate(binary,binary, element);
 
         vector<vector<Point>> contours;
         vector<Vec4i> hierarchy;
         Point2i center;
+        // findContours only cost 1 ms in my machine (i5-9300H GTX1650)
         findContours(binary, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0,0));
         vector<int> contour(contours.size());   // all zeros 
         for (size_t i = 0; i < contours.size(); i++)
@@ -102,67 +117,7 @@ int main()
                 }
             }
         }
-        { 
-        // for (size_t i = 0; i < contours.size(); i++)
-        // {
-
-        //     vector<Point> points;
-        //     double area = contourArea(contours[i]);
-        //     if (area < 50 || 1e4 < area) continue;
-        //     drawContours(image, contours, static_cast<int>(i), Scalar(0), 2);
-
-        //     points = contours[i];
-        //     RotatedRect rrect = fitEllipse(points);
-        //     cv::Point2f* vertices = new cv::Point2f[4];
-        //     rrect.points(vertices);
-
-        //     float aim = rrect.size.height/rrect.size.width;
-        //     if(aim > 1.7 && aim < 2.6){
-        //         for (int j = 0; j < 4; j++)
-        //         {
-        //             cv::line(binary, vertices[j], vertices[(j + 1) % 4], cv::Scalar(0, 255, 0),4);
-        //         }
-        //         float middle = 100000;
-
-        //         for(size_t j = 1;j < contours.size();j++){
-
-        //             vector<Point> pointsA;
-        //             double area = contourArea(contours[j]);
-        //             if (area < 50 || 1e4 < area) continue;
-
-        //             pointsA = contours[j];
-
-        //             RotatedRect rrectA = fitEllipse(pointsA);
-
-        //             float aimA = rrectA.size.height/rrectA.size.width;
-
-        //             if(aimA > 3.0){
-        //             float distance = sqrt((rrect.center.x-rrectA.center.x)*(rrect.center.x-rrectA.center.x)+
-        //                                   (rrect.center.y-rrectA.center.y)*(rrect.center.y-rrectA.center.y));
-
-        //             if (middle > distance  )
-        //                 middle = distance;
-        //             }
-        //         }
-        //         if( middle > 60){                               //这个距离也要根据实际情况调,和图像尺寸和物体远近有关。
-        //             cv::circle(binary,Point(rrect.center.x,rrect.center.y),15,cv::Scalar(0,0,255),4);  //circle the target 
-        //             Mat prediction = KF.predict();
-        //             Point predict_pt = Point((int)prediction.at<float>(0), (int)prediction.at<float>(1));
-
-        //             measurement.at<float>(0) = (float)rrect.center.x;
-        //             measurement.at<float>(1) = (float)rrect.center.y;
-        //             KF.correct(measurement);
-
-        //             circle(binary, predict_pt, 3, Scalar(34, 255, 255), -1);
-
-        //             rrect.center.x = (int)prediction.at<float>(0);
-        //             rrect.center.y = (int)prediction.at<float>(1);
-
-        //         }
-        //     }
-        // }
-        }
-        auto end = system_clock::now();
+        
         auto duration = duration_cast<microseconds>(end - start);
         printf("time cost: %lf ms\n", duration.count()/1000.0);
         imshow("frame",binary);
