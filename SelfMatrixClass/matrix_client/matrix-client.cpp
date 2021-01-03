@@ -5,15 +5,15 @@
 
 using namespace std;
 
-//!  .data()å¼•èµ·çš„å¥‡å¼‚æ”¹åçŽ°è±¡
-//!  å¯¹æ ‡å‡†è¾“å…¥æµçš„æ“çºµ
+//!  .data()ÒýÆðµÄÆæÒì¸ÄÃûÏÖÏó
+//!  ¶Ô±ê×¼ÊäÈëÁ÷µÄ²Ù×Ý
 
 /*to implement:
 0.create & store a var;    //get a string from console and store
                             it in an array with a pointer
 */
 
-//å¾…æ·»åŠ åŠŸèƒ½ï¼šè§£é½æ¬¡çº¿æ€§æ–¹ç¨‹ç»„ i.e. ker(A)
+//´ýÌí¼Ó¹¦ÄÜ£º½âÆë´ÎÏßÐÔ·½³Ì×é i.e. ker(A)
 
 #define FAIL string::npos
 
@@ -111,6 +111,11 @@ int main()
             {
                 string matrix_name;
                 cin >> matrix_name;
+                if (matrix_name[0] >= '0' && matrix_name[0] <= '9')
+                {
+                    cout << "Variable's name can't start with number\n";
+                    break;
+                }
                 int loc = search(dictionary, matrix_name);
                 while(loc != -1){
                     cout <<'"'<<matrix_name<<'"'<<" exists. Please use another name.\n";
@@ -136,23 +141,28 @@ int main()
                             cin.clear();
                             cin.sync();
                             badsize = true;
+                            break;
                         }
                         matrix_height = 10*matrix_height + str[i] - '0';
                     }
-                    
-                    while (str[i] == ' ' || str[i] == '\t')
-                        i++;
+                    if (!badsize)
+                    {
+                        while (str[i] == ' ' || str[i] == '\t')
+                            i++;
 
-                    for (; str[i] != '\0'; i++)
-                    {   
-                        if (str[i] < '0' || str[i] > '9')
-                        {
-                            cin.clear();
-                            cin.sync();
-                            badsize = true;
+                        for (; str[i] != '\0'; i++)
+                        {   
+                            if (str[i] < '0' || str[i] > '9')
+                            {
+                                cin.clear();
+                                cin.sync();
+                                badsize = true;
+                                break;
+                            }
+                            matrix_width = 10*matrix_width + str[i] - '0';
                         }
-                        matrix_width = 10*matrix_width + str[i] - '0';
                     }
+                    
                     
                     if (!badsize)
                     {
@@ -869,3 +879,4 @@ string strip(string& str, char ch)
     s = str.substr(i, j-i+1);
     return s;
 }
+

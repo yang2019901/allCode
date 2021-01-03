@@ -48,7 +48,7 @@ expanded     abbreviated (same effect)   usage(m1,m2 are two example)\n\
 {setwidth,           sw},                sw m1 2\n\
 {size,                s},                s m1\n\
 {isempty,         isept},                isempty m1\n\
-{enter,             etr},                etr m1\n\
+{initialize,       init},                init m1\n\
 {show,              shw},                shw m1\n\
 {plus,                +},                plus m1 m2\n\
 {multiply,            *},                multiply m1 m2\n\
@@ -62,4 +62,10 @@ expanded     abbreviated (same effect)   usage(m1,m2 are two example)\n\
 {rank,                r},                rank m1\n\
 {kernel,            ker},                ker m1\n\
 {solve,             slv},                solve m1 (note: proceed with following guidance)\n\
+{orthogonalize,    orth},                orth m1\n\
+{trace,              tr},                tr m1\n\
+{symmetric,         sym},                sym m1\n\
+{appendCols,    appcols},                appcols m1 m2 (append m2 cols to m1 cols)\n\
+{appendRows,    approws},                approws m1 m2 (append m2 rows to m1 rows)\n\
+{congruent,      congrt},                congrt m1 T (return transpose(T) * m1 * T)\n\
 ";

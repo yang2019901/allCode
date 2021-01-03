@@ -7,9 +7,9 @@ int main()
 {
     // TEST:
     matrix m1(3,2); 
-    matrix m2(2,3);
+    matrix m2(3,1);
     cin >> m1 >> m2;
-    m1 = m1*m2;
+    m1.widen(m2);
     printf("height: %d width: %d\n", m1.Height(), m1.Width());
     cout << m1;
 

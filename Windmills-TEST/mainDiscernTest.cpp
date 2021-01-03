@@ -50,7 +50,7 @@ int main()
                 // 获得像素点的颜色
                 Vec3b &pixel_color = binary.at<Vec3b>(i, j);
                 // 计算绿色程度
-                int rate = pixel_color[0] - 0.5 * pixel_color[1] - 0.5 * pixel_color[2];
+                int rate = pixel_color[0] * 2 - pixel_color[1] - pixel_color[2];
                 if (rate < 0)
                     rate = 0;
                 if (rate > 255)
@@ -58,16 +58,16 @@ int main()
                 grey.at<uchar>(i, j) = rate;
             }
         }
-        // medianBlur(binary,binary,3);
-        threshold(grey, binary, 120, 255, THRESH_BINARY);        //阈值要自己调
+        medianBlur(binary,binary,3);
+        threshold(grey, binary, 150, 255, THRESH_BINARY);        //阈值要自己调
         imshow("blue discern", grey);
         Mat element = getStructuringElement(MORPH_RECT, Size(3,3));
-        morphologyEx(binary,binary,MORPH_DILATE,element);
+        morphologyEx(binary,binary,MORPH_CLOSE,element);
 
         vector<vector<Point>> contours;
         vector<Vec4i> hierarchy;
         Point2i center;
-        findContours(binary, contours, hierarchy, RETR_TREE, CHAIN_APPROX_NONE, Point(0,0));
+        findContours(binary, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0,0));
         vector<int> contour(contours.size());   // all zeros 
         for (size_t i = 0; i < contours.size(); i++)
             if (hierarchy[i][3] != -1)
@@ -83,7 +83,7 @@ int main()
                 for (int i = 0; i < 4; i++)
                     line(image, vertex[i], vertex[(i+1)%4], Scalar(0,255,0),2, LINE_AA);
                 center = (vertex[0] + vertex[2]) / 2;
-                putText(image, "target", vertex[0], FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255,255,0));
+                // putText(image, "target", vertex[0], FONT_HERSHEY_SIMPLEX, 1.0, Scalar(255,255,0));
                 try
                 {
                     cv::circle(image, Point(center.x, center.y), 15, cv::Scalar(0, 0, 255), 4); //circle the target
@@ -167,7 +167,7 @@ int main()
         printf("time cost: %lf ms\n", duration.count()/1000.0);
         imshow("frame",binary);
         imshow("Original", image);
-        if(waitKey(10) == 'q')
+        if(waitKey(0) == 'q')
             break;
     }
 }

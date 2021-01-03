@@ -243,12 +243,13 @@ matrix& matrix::operator =(const matrix& A){
         pmtx = new Row[height];
     }
 
-    //to prevent self-assigned 
+    //to prevent self-assigned
     if(this == &A)
         return *this;
     for(Plus i = 0; i < height; i++)    
         pmtx[i] = A.pmtx[i];
     this->isempty = 0;
+    this->width = A.width;
     return *this;
 }
 
@@ -636,7 +637,7 @@ double matrix::determinant(void) const
         }
         return sum;
     }
-    else // i.e.  height == 1
+    if(height == 1)
         return pmtx[0][0];
 }
 
@@ -817,7 +818,7 @@ matrix matrix::orthogonalize(void) const
         for (int j = 0; j < i; j++)
         {
             double norm = rlt.pmtx[j]*rlt.pmtx[j];
-            if (abs(norm) < 1e-5)
+            if (fabs(norm) < 1e-5)
                 continue;
             rlt.pmtx[i] = rlt.pmtx[i] + -(rlt.pmtx[j]*pmtx[i])/norm*rlt.pmtx[j];
         }
