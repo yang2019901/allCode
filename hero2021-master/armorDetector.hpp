@@ -140,8 +140,8 @@ protected :
 /*
  *   PolyMatchArmorDetector is a detector based on matching polys
  *   Poly matching suits rolling shutter cameras by adding some probabilities
- * when the target moving fast or gimbal self moving fast. To stablize the
- * detection result , add tracking algorithm to
+ *   when the target moving fast or gimbal self moving fast. To stablize the
+ *   detection result , add tracking algorithm to
  */
 class PolyMatchArmorDetector : public ArmorBaseDetector
 {

@@ -10,7 +10,7 @@ const bool BLUE = false;
 const bool RED = true;
 
 // 对于wind.mp4 对中心标志R的识别效果很好
-bool findMillCenter(Mat src, bool ColorFlag, Point &center)
+bool findMillCenter(Mat src, const bool ColorFlag, Point &center)
 {
     if (src.empty())
     {
@@ -64,22 +64,62 @@ void trimRegion(Mat src, Rect &region)
     return;
 }
 
-RotatedRect armorDetect(Mat src)
+RotatedRect armorDetect(Mat src, const bool ColorFlag)
 {
+    if (src.empty())
+    {
+        printf("src is empty\n");
+        return RotatedRect();
+    }
+    vector<Mat> splited;
+    split(src, splited);
+    Mat temp;
+    medianBlur(src, temp, 3);
+    if (ColorFlag == BLUE)
+    {
+        subtract(splited[0], splited[2], temp);
+    }
+    else
+    {
+        subtract(splited[2], splited[0], temp);
+    }
+    dilate(temp, temp, Mat());
+    medianBlur(temp, temp, 3);
+    threshold(temp, temp, 120, 255, THRESH_BINARY);
+    Mat element = getStructuringElement(MORPH_RECT, Size(3,3));
+    morphologyEx(temp, temp, MORPH_CLOSE, element, Point(0,0), 1);
+
+    vector<vector<Point>> contours;
+    vector<Vec4i> hierarchy;
+    Point2i center;
+    // findContours only cost 1 ms in my machine (i5-9300H GTX1650)
+    findContours(temp, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
+    vector<int> contour(contours.size()); // all zeros
+    for (size_t i = 0; i < contours.size(); i++)
+        if (hierarchy[i][3] != -1)
+            contour[hierarchy[i][3]]++;
+    for (size_t i = 0; i < contour.size(); i++)
+    {
+        if (contour[i] == 1)
+        {
+            return minAreaRect(contours[hierarchy[i][2]]);
+        }
+    }
+    return RotatedRect();
 }
 
-Rect centerRoi(Mat src, Point center)
+Rect centerRoi(Mat src, const bool ColorFlag, Point &center)
 {
     if (src.empty())
     {
         return Rect(0, 0, src.cols, src.rows);
     }
     Point2f vertex[4];
-    armorDetect(src).points(vertex);
+    armorDetect(src, ColorFlag).points(vertex);
     int armlength = 0;
     for (const Point &ver : vertex)
     {
-        armlength = MAX(armlength, pow(pow(ver.x - center.x, 2) + pow(ver.y - center.y, 2), 0.5) + 2);
+        armlength = MAX(armlength, sqrt(pow(ver.x - center.x, 2) + pow(ver.y - center.y, 2)) + 20);
         // explanation: add extra number to ensure the calculating error will be offset
     }
     Rect Roi(center.x - armlength, center.y - armlength, 2 * armlength, 2 * armlength);
@@ -100,8 +140,12 @@ int main()
         resize(p1, p1, Size(640, 480));
         Point center;
         if (findMillCenter(p1, BLUE, center))
+        { 
             circle(p1, center, 0, Scalar(0, 255, 255), 5);
-        imshow("fig with mark", p1);
+            Rect Roi = centerRoi(p1, BLUE, center);
+            rectangle(p1, Roi, Scalar(255,0,255),2);
+        }
+        imshow("marked frame", p1);
         if (waitKey(0) == 'q')
             break;
     }

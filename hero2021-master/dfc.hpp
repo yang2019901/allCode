@@ -101,7 +101,7 @@ void bigWindMill( Mat img, Point2f a, Point2f r){//处理大风车图片
 		structElementSize=3;
 		element=getStructuringElement(MORPH_RECT,Size(2*structElementSize+1,2*structElementSize+1),Point(structElementSize,structElementSize));
 		morphologyEx(midImage,midImage, MORPH_CLOSE, element);
-       Mat src = midImage;
+        Mat src = midImage;
 	   
 		//查找轮廓
 		vector<vector<Point>> contours2;
