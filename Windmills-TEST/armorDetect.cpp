@@ -18,7 +18,7 @@ bool findMillCenter(Mat src, const bool ColorFlag, Point &center)
 {
     if (src.empty())
     {
-        printf("src is empty\n");
+        printf("src received by 'findMillCenter()' is empty\n");
         return false;
     }
     vector<Mat> splited;
@@ -74,7 +74,7 @@ RotatedRect armorDetect(Mat src, const bool ColorFlag)
 {
     if (src.empty())
     {
-        printf("src is empty\n");
+        printf("src received by 'armorDetect()' is empty\n");
         return RotatedRect();
     }
     vector<Mat> splited;
@@ -119,6 +119,7 @@ Rect centerRoi(Mat src, const bool ColorFlag, Point &center)
 {
     if (src.empty())
     {
+        printf("src received by 'centerRoi()' is empty\n");
         return Rect(0, 0, src.cols, src.rows);
     }
     Point2f vertex[4];
@@ -134,7 +135,6 @@ Rect centerRoi(Mat src, const bool ColorFlag, Point &center)
     return Roi;
 }
 
-
 // 策略：Efficiency first!
 // mode=0:使用内嵌矩形的方式进行识别
 // mode=1:使用面积比，距离的方式进行识别(to be added)
@@ -142,7 +142,7 @@ RotatedRect targetDetect(Mat roi, const bool ColorFlag, int mode)
 {
     if (roi.empty())
     {
-        printf("roi is empty\n");
+        printf("roi received by 'targetDetect()' is empty\n");
         return RotatedRect();
     }
     if (mode == 0)
@@ -258,6 +258,39 @@ RotatedRect targetDetect(Mat roi, const bool ColorFlag, int mode)
     }
 }
 
+Point targetLock(Mat src, const bool ColorFlag, int mode)
+{
+    static Rect ROI;    // 矩形区域 ROI （如果已经找到的话）
+    static Point centerR;   // 中心点 R 的坐标 （如果已经找到的话）
+    static Point sampleR[50];   // 取“聚点”作为大风车中心点的坐标
+    static bool ROIavail = false;   // ROI是否有效（找到）
+    static bool centerRavail = false;   // 中心点R坐标是否有效（找到）
+    
+    // preprocess:
+    if (src.empty())
+    {
+        printf("src received by 'targetLock()' is empty\n");
+        return Point();
+    }
+
+
+    if (!centerRavail)
+    {
+
+
+        
+    }
+
+    if (!ROIavail)
+    {
+
+
+    }
+
+    Mat roi = Mat(src, ROI);
+    targetDetect(roi, ColorFlag, mode);
+}
+
 int main()
 {
     VideoCapture cap("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind.mp4");
@@ -268,9 +301,9 @@ int main()
     while (true)
     {
         cap >> p1;
-        auto start = system_clock::now();
         if (p1.empty())
             break;
+        auto start = system_clock::now();
         resize(p1, p1, Size(640, 480));
         Point center;
         Rect Roi(0,0,p1.cols,p1.rows);
@@ -280,12 +313,12 @@ int main()
             Roi = centerRoi(p1, BLUE, center);
             rectangle(p1, Roi, Scalar(255,0,255),2);
         }
-
         Mat roi = Mat(p1, Roi);
-        targetDetect(roi, BLUE, 0).points(vertices);
+
+        targetDetect(p1, BLUE, 0).points(vertices);
         for (int i = 0; i < 4; i++)
         {
-            line(roi, vertices[i], vertices[(i+1)%4], Scalar(0,255,255),2);
+            line(p1, vertices[i], vertices[(i+1)%4], Scalar(0,255,255), 2);
         }
 
         auto end = system_clock::now();

@@ -24,5 +24,6 @@
     
     },
     "code-runner.customCommand": "-std=c++11",
-    "cmake.configureOnOpen": false
+    "cmake.configureOnOpen": false,
+    "C_Cpp.errorSquiggles": "Enabled"
 }
