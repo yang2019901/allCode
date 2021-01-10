@@ -13,8 +13,29 @@ const bool RED = true;
 
 #define TIMING true
 
+class MillHiter
+{
+protected:
+    Rect _roi;                  // 矩形区域 ROI （如果已经找到的话）
+    Point _centerR;             // 中心点 R 的坐标 （如果已经找到的话）
+    Point _sampleR[50];         // 取“聚点”作为大风车中心点的坐标
+    bool _roiAvail;             // ROI是否有效（找到）
+    bool _centerRAvail;         // 中心点R坐标是否有效（找到）
+
+public:
+    MillHiter():_roiAvail(false), _centerRAvail(false){};
+    MillHiter(Rect roi, Point centerR): _roi(roi), _centerR(centerR), _roiAvail(true), _centerRAvail(true){};
+    ~MillHiter();
+    bool findMillCenter(Mat src, const bool ColorFlag, Point &center);
+    void trimRegion(Mat src, Rect &region);
+    RotatedRect armorDetect(Mat src, const bool ColorFlag);
+    Rect centerRoi(Mat src, const bool ColorFlag, Point &center);
+    RotatedRect targetDetect(Mat roi, const bool ColorFlag, int mode);
+    Point targetLock(Mat src, const bool ColorFlag, int mode);
+};
+
 // 对于wind.mp4 对中心标志R的识别效果很好
-bool findMillCenter(Mat src, const bool ColorFlag, Point &center)
+bool MillHiter::findMillCenter(Mat src, const bool ColorFlag, Point &center)
 {
     if (src.empty())
     {
@@ -59,7 +80,7 @@ bool findMillCenter(Mat src, const bool ColorFlag, Point &center)
 }
 
 // trimRegion 对于wind1.jpg生效
-void trimRegion(Mat src, Rect &region)
+void MillHiter::trimRegion(Mat src, Rect &region)
 {
     region.x = max(0, region.x);
     region.y = max(0, region.y);
@@ -70,7 +91,7 @@ void trimRegion(Mat src, Rect &region)
 
 // 对于wind.mp4 绝大多数帧识别良好，除了用手遮挡的那几帧。同时需要注意，它不能区分已击打和未击打的装甲板
 // 策略：Accuracy first!
-RotatedRect armorDetect(Mat src, const bool ColorFlag)
+RotatedRect MillHiter::armorDetect(Mat src, const bool ColorFlag)
 {
     if (src.empty())
     {
@@ -115,7 +136,7 @@ RotatedRect armorDetect(Mat src, const bool ColorFlag)
 }
 
 // 对于wind.mp4 roi卡范围的效果很好
-Rect centerRoi(Mat src, const bool ColorFlag, Point &center)
+Rect MillHiter::centerRoi(Mat src, const bool ColorFlag, Point &center)
 {
     if (src.empty())
     {
@@ -138,7 +159,7 @@ Rect centerRoi(Mat src, const bool ColorFlag, Point &center)
 // 策略：Efficiency first!
 // mode=0:使用内嵌矩形的方式进行识别
 // mode=1:使用面积比，距离的方式进行识别(to be added)
-RotatedRect targetDetect(Mat roi, const bool ColorFlag, int mode)
+RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode)
 {
     if (roi.empty())
     {
@@ -258,14 +279,8 @@ RotatedRect targetDetect(Mat roi, const bool ColorFlag, int mode)
     }
 }
 
-Point targetLock(Mat src, const bool ColorFlag, int mode)
+Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode)
 {
-    static Rect ROI;    // 矩形区域 ROI （如果已经找到的话）
-    static Point centerR;   // 中心点 R 的坐标 （如果已经找到的话）
-    static Point sampleR[50];   // 取“聚点”作为大风车中心点的坐标
-    static bool ROIavail = false;   // ROI是否有效（找到）
-    static bool centerRavail = false;   // 中心点R坐标是否有效（找到）
-    
     // preprocess:
     if (src.empty())
     {
@@ -273,22 +288,21 @@ Point targetLock(Mat src, const bool ColorFlag, int mode)
         return Point();
     }
 
-
-    if (!centerRavail)
+    if (!this->_centerRAvail)
     {
 
 
         
     }
 
-    if (!ROIavail)
+    if (!this->_roiAvail)
     {
 
 
     }
 
-    Mat roi = Mat(src, ROI);
-    targetDetect(roi, ColorFlag, mode);
+    Mat roi = Mat(src, this->_roi);
+    this->targetDetect(roi, ColorFlag, mode);
 }
 
 int main()
