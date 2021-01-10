@@ -33,7 +33,8 @@ int main()
     setIdentity(KF.errorCovPost, Scalar::all(1));//P后验误差估计协方差矩阵，初始化为单位阵
     randn(KF.statePost, Scalar::all(0), Scalar::all(0.1));//初始化状态为随机值
 
-    for(;;){
+    for(;;)
+    {
         cap.read(image);
         Mat binary;
 
@@ -118,7 +119,7 @@ int main()
 
         imshow("frame",image);
         imshow("Original", binary);
-        if (waitKey(1) == 'q')
+        if (waitKey(10) == 'q')
             break;
     }
 }
