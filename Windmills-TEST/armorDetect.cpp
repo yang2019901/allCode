@@ -12,26 +12,27 @@ const bool BLUE = false;
 const bool RED = true;
 
 #define TIMING true
+#define DISTANCE(p1, p2) sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2))
 
 class MillHiter
 {
 protected:
     Rect _roi;                  // 矩形区域 ROI （如果已经找到的话）
     Point _centerR;             // 中心点 R 的坐标 （如果已经找到的话）
-    Point _sampleR[50];         // 取“聚点”作为大风车中心点的坐标
+    vector<Point> _sampleR;         // 取“聚点”作为大风车中心点的坐标
     bool _roiAvail;             // ROI是否有效（找到）
     bool _centerRAvail;         // 中心点R坐标是否有效（找到）
 
 public:
     MillHiter():_roiAvail(false), _centerRAvail(false){};
     MillHiter(Rect roi, Point centerR): _roi(roi), _centerR(centerR), _roiAvail(true), _centerRAvail(true){};
-    ~MillHiter();
+
     bool findMillCenter(Mat src, const bool ColorFlag, Point &center);
     void trimRegion(Mat src, Rect &region);
     RotatedRect armorDetect(Mat src, const bool ColorFlag);
     Rect centerRoi(Mat src, const bool ColorFlag, Point &center);
     RotatedRect targetDetect(Mat roi, const bool ColorFlag, int mode);
-    Point targetLock(Mat src, const bool ColorFlag, int mode);
+    Point targetLock(Mat src, const bool ColorFlag, int mode, int SampleSize= 10, double DistanceErr=7.0, double nearbyPercentage = 0.8);
 };
 
 // 对于wind.mp4 对中心标志R的识别效果很好
@@ -158,7 +159,7 @@ Rect MillHiter::centerRoi(Mat src, const bool ColorFlag, Point &center)
 
 // 策略：Efficiency first!
 // mode=0:使用内嵌矩形的方式进行识别
-// mode=1:使用面积比，距离的方式进行识别(to be added)
+// mode=1:使用面积比，距离的方式进行识别
 RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode)
 {
     if (roi.empty())
@@ -279,7 +280,8 @@ RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode)
     }
 }
 
-Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode)
+// 对于wind.mp4，ROI设置好后，有一定的优化效果，设置前则每帧耗时9-10ms
+Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode, int SampleSize, double DistanceErr, double nearbyPercentage)
 {
     // preprocess:
     if (src.empty())
@@ -288,58 +290,109 @@ Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode)
         return Point();
     }
 
-    if (!this->_centerRAvail)
+    bool noR = !this->_centerRAvail;
+    bool noRoi = !this->_roiAvail;
+    if (!noRoi) rectangle(src, _roi, Scalar(0,255,255),2);
+    
+    else if (noRoi && noR)      // 最初始的状态
     {
-
-
-        
+        Point centerNow;
+        if (this->findMillCenter(src, ColorFlag, centerNow))  // 此时findMillCenter 找到了这帧的 R，把该组数据压入 _sampleR中作为有效数据
+        {
+            this->_sampleR.push_back(centerNow);
+            if (_sampleR.size() < SampleSize)   
+            {
+                this->_roi = Rect(0, 0, src.cols, src.rows);
+            }
+            else   // 如果_sample.size() 已经达到SampleSize（取了一个不大不小的值 25 作为样本容量的默认值），就开始拟合中心。策略：把偏差过大的点舍去，取“聚点”
+            {
+                for (int i = 0; i < SampleSize; i++)
+                {
+                    int neighborNum = 1;        // 该点和它本身距离为0，足够小，故临近点个数初始化为1，子循环遍历从第i+1个开始    
+                    for (int j = i + 1; j < SampleSize; j++)
+                        if (DISTANCE(this->_sampleR[i], this->_sampleR[j]) < DistanceErr)         // 注意：这里的误差是需要调节的，此处草率地预设为 7.0
+                            neighborNum++;
+                    if (double(neighborNum) / SampleSize >= nearbyPercentage)       // 有超过nearbyPercentage的点聚集在该点的周围，可以认为该点就是“聚点”
+                    {
+                        this->_centerRAvail = true;
+                        this->_centerR = this->_sampleR[i];
+                        noR = false;
+                        break;
+                    }
+                    if (i == SampleSize)    // 遍历至此，还不退出，这说明没有点是聚点，所以清空所有样本数据，重测
+                    {
+                        this->_sampleR.clear();
+                        this->_roi = Rect(0, 0, src.cols, src.rows);
+                    }
+                }
+            }
+        }
+        else    // 说明 findMillCenter 失败了，此时不改变 _sampleR，将roi设置为全图（即在全图中寻找） 
+        {
+            this->_roi = Rect(0, 0, src.cols, src.rows);
+        }
     }
 
-    if (!this->_roiAvail)
+    if (noRoi && !noR)  // 不加else是因为可能在此帧拟合出来了R点，如果加了，在这帧，这个分支就会被跳过
     {
-
-
+        this->_roi = centerRoi(src, ColorFlag, this->_centerR);              // centerRoi一般会成功，但也有可能失败
+        if (this->_roi.width == src.cols && this->_roi.height == src.rows)   // 如果出现_roi区域和全图的大小一样，说明这次寻找失败了，设置_roiAvail为false，下次再找
+        {
+            this->_roiAvail = false;
+        }
+        else
+        {
+            this->_roiAvail = true;
+        }
     }
 
     Mat roi = Mat(src, this->_roi);
-    this->targetDetect(roi, ColorFlag, mode);
+    RotatedRect target = this->targetDetect(roi, ColorFlag, mode);
+    return Point(target.center.x + this->_roi.x, target.center.y + this->_roi.y);
 }
 
 int main()
 {
     VideoCapture cap("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind.mp4");
-    Mat p1;
-    // p1 = imread("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind4.jpg");
+    Mat frame;
+    // frame = imread("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind4.jpg");
     Point2f vertices[4];
-    
+    MillHiter hit;
     while (true)
     {
-        cap >> p1;
-        if (p1.empty())
+        cap >> frame;
+        if (frame.empty())
             break;
         auto start = system_clock::now();
-        resize(p1, p1, Size(640, 480));
-        Point center;
-        Rect Roi(0,0,p1.cols,p1.rows);
-        if (findMillCenter(p1, BLUE, center))
-        { 
-            circle(p1, center, 0, Scalar(0, 255, 255), 5);
-            Roi = centerRoi(p1, BLUE, center);
-            rectangle(p1, Roi, Scalar(255,0,255),2);
-        }
-        Mat roi = Mat(p1, Roi);
+        resize(frame, frame, Size(640, 480));
 
-        targetDetect(p1, BLUE, 0).points(vertices);
-        for (int i = 0; i < 4; i++)
-        {
-            line(p1, vertices[i], vertices[(i+1)%4], Scalar(0,255,255), 2);
-        }
+        // ///// 以下注释是设置roi的代码，耗时比较长，但是只用在最开始的几帧（目前targetLock函数默认设置的是10帧）找，后面就都在roi里进行了
+        // ///// 在单次击打过程中，roi固定为整个大风车的区域（注意不是单个扇叶），代码待编写，效果待测试··· -----> 有一定的效果
+        // Point center;
+        // Rect Roi(0,0,frame.cols,frame.rows);
+        // if (hit.findMillCenter(frame, BLUE, center))
+        // { 
+        //     circle(frame, center, 0, Scalar(0, 255, 255), 5);
+        //     Roi = hit.centerRoi(frame, BLUE, center);
+        //     rectangle(frame, Roi, Scalar(255,0,255),2);
+        // }
+        // Mat roi = Mat(frame, Roi);
+        // ////// roi设置结束 ////////////////////////////////////////////////////////////////////////////////////
+
+        // 在全图中寻找待击打扇叶
+        // hit.targetDetect(frame, BLUE, 0).points(vertices);
+        // for (int i = 0; i < 4; i++)
+        // {
+        //     line(frame, vertices[i], vertices[(i+1)%4], Scalar(0,255,255), 2);
+        // }
+
+        circle(frame, hit.targetLock(frame, BLUE, 0), 0, Scalar(0,255,255), 5);
 
         auto end = system_clock::now();
         auto duration = duration_cast<microseconds>(end - start);
         printf("time cost: %lf ms\n", duration.count() / 1000.0);
-        imshow("marked frame", p1);
-        if (waitKey(0) == 'q')
+        imshow("marked frame", frame);
+        if (waitKey(10) == 'q')
             break;
     }
     system("pause");
