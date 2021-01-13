@@ -14,12 +14,13 @@ const bool RED = true;
 #define TIMING true
 #define DISTANCE(p1, p2) sqrt(pow(p1.x - p2.x, 2) + pow(p1.y - p2.y, 2))
 
+// NOTE: ROI算法的前提是相机参考系与大符参考系完全相对静止，这就要求不能使用安装在枪管上的相机，不然图片会随之而动，导致ROI设置失败
 class MillHiter
 {
 protected:
     Rect _roi;                  // 矩形区域 ROI （如果已经找到的话）
     Point _centerR;             // 中心点 R 的坐标 （如果已经找到的话）
-    vector<Point> _sampleR;         // 取“聚点”作为大风车中心点的坐标
+    vector<Point> _sampleR;     // 取“聚点”作为大风车中心点的坐标
     bool _roiAvail;             // ROI是否有效（找到）
     bool _centerRAvail;         // 中心点R坐标是否有效（找到）
 
@@ -158,8 +159,8 @@ Rect MillHiter::centerRoi(Mat src, const bool ColorFlag, Point &center)
 }
 
 // 策略：Efficiency first!
-// mode=0:使用内嵌矩形的方式进行识别
-// mode=1:使用面积比，距离的方式进行识别
+// mode=0:使用内嵌矩形的方式进行识别。注：预处理图片使用红蓝通道相减，因此ColorFlag的值很重要。
+// mode=1:使用面积比，距离的方式进行识别。注：预处理图片使用亮度（装甲的灯条亮度显著高于周围环境），与ColorFlag的值无关。
 RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode)
 {
     if (roi.empty())
@@ -220,7 +221,6 @@ RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode)
         floodFill(gray, Point(5, 50), Scalar(255), 0, FLOODFILL_FIXED_RANGE); // around 1ms
 
         threshold(gray, gray, 80, 255, THRESH_BINARY_INV);
-        imshow("mode2 gray", gray);
         vector<vector<Point>> contours;
         findContours(gray, contours, RETR_LIST, CHAIN_APPROX_NONE); // sometimes 1ms
 
@@ -280,6 +280,7 @@ RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode)
     }
 }
 
+// 该ROI设置算法对相机参考系与大符参考系的相对静止有严重依赖！！！
 // 对于wind.mp4，ROI设置好后，有一定的优化效果，设置前则每帧耗时9-10ms
 Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode, int SampleSize, double DistanceErr, double nearbyPercentage)
 {
@@ -380,13 +381,13 @@ int main()
         // ////// roi设置结束 ////////////////////////////////////////////////////////////////////////////////////
 
         // 在全图中寻找待击打扇叶
-        // hit.targetDetect(frame, BLUE, 0).points(vertices);
-        // for (int i = 0; i < 4; i++)
-        // {
-        //     line(frame, vertices[i], vertices[(i+1)%4], Scalar(0,255,255), 2);
-        // }
+        hit.targetDetect(frame, BLUE, 0).points(vertices);
+        for (int i = 0; i < 4; i++)
+        {
+            line(frame, vertices[i], vertices[(i+1)%4], Scalar(0,255,255), 2);
+        }
 
-        circle(frame, hit.targetLock(frame, BLUE, 0), 0, Scalar(0,255,255), 5);
+        // circle(frame, hit.targetLock(frame, BLUE, 0), 0, Scalar(0,255,255), 5);
 
         auto end = system_clock::now();
         auto duration = duration_cast<microseconds>(end - start);
