@@ -4,6 +4,8 @@
 ////    as "dstImage" of function like "cvtColor",etc.
 //////////////////////////////////////////////////////////////////
 
+
+// TODO 结合该实例中的kalman预测（defective!只能跟随而不能预测），理解kalman各个参数的含义和初始化方法
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <math.h>
@@ -38,11 +40,11 @@ int main()
         cap.read(image);
         Mat binary;
 
-        auto start = system_clock::now();
+        auto start = steady_clock::now();
         resize(image,image,Size(640,480));   // costs 2ms
         cvtColor(image,binary,COLOR_BGR2GRAY);      // around 1ms sometimes 1.5ms
         threshold(binary,binary, 80, 255, THRESH_BINARY);  // no time   //阈值要自己调
-        // auto end = system_clock::now();
+        // auto end = steady_clock::now();
 
         dilate(binary,binary,Mat());   // sometimes 1ms about these two operations
         dilate(binary,binary,Mat());
@@ -113,7 +115,7 @@ int main()
             }
         }
 
-        auto end = system_clock::now();
+        auto end = steady_clock::now();
         auto duration = duration_cast<microseconds>(end - start);
         printf("time cost: %lf ms\n", duration.count() / 1000.0);
 

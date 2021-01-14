@@ -39,7 +39,7 @@ int main()
         cap.read(image);
         // Test time cost:
         
-        auto start = system_clock::now();
+        auto start = steady_clock::now();
 
         image.copyTo(binary);
         resize(image,image,Size(image.cols*0.5,binary.rows*0.5));
@@ -71,7 +71,7 @@ int main()
         // Mat hsvImage;
         // cvtColor(image, hsvImage, COLOR_BGR2HSV);
         // inRange(hsvImage,Scalar(100, 150,150),Scalar(124,255,255),binary);
-        auto end = system_clock::now();
+        auto end = steady_clock::now();
         threshold(grey, binary, 150, 255, THRESH_BINARY);        //阈值要自己调
         imshow("blue discern", binary);
         Mat element = getStructuringElement(MORPH_RECT, Size(3,3));
