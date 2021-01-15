@@ -24,8 +24,8 @@ int main()
     KalmanFilter KF(stateNum, measureNum, 0);
     //Mat processNoise(stateNum, 1, CV_32F);
     Mat measurement = Mat::zeros(measureNum, 1, CV_32F);
-    KF.transitionMatrix = (Mat_<float>(stateNum, stateNum) << 1, 0, 1, 0,//A 状态转移矩阵
-        0, 1, 0, 1,
+    KF.transitionMatrix = (Mat_<float>(stateNum, stateNum) << 1, 0, 10, 0,//A 状态转移矩阵
+        0, 1, 0, 10,
         0, 0, 1, 0,
         0, 0, 0, 1);
     //这里没有设置控制矩阵B，默认为零

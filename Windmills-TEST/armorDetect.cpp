@@ -12,6 +12,8 @@ const bool BLUE = false;
 const bool RED = true;
 const bool DEG = false;
 const bool RAD = true;
+const int CONSTSPEED = 0;
+const int SINSPEED = 1;
 
 #ifndef PI
 #define PI 3.1415927
@@ -33,25 +35,31 @@ class MillHiter
 {
 protected:
     Rect _roi;                  // 矩形区域 ROI （如果已经找到的话）
-    Point _centerR;             // 中心点 R 的坐标 （如果已经找到的话）
-    vector<Point> _sampleR;     // 取“聚点”作为大风车中心点的坐标
+    Point2f _centerR;             // 中心点 R 的坐标 （如果已经找到的话）
+    vector<Point2f> _sampleR;     // 取“聚点”作为大风车中心点的坐标
     bool _roiAvail;             // ROI是否有效（找到）
     bool _centerRAvail;         // 中心点R坐标是否有效（找到）
+    bool _colorFlag;
 
 public:
-    MillHiter():_roiAvail(false), _centerRAvail(false){};
-    MillHiter(Rect roi, Point centerR): _roi(roi), _centerR(centerR), _roiAvail(true), _centerRAvail(true){};
+    MillHiter() : _roiAvail(false), _centerRAvail(false){};
+    MillHiter(bool colorFlag) : _colorFlag(colorFlag), _roiAvail(false), _centerRAvail(false){};
+    MillHiter(Rect roi, Point2f centerR): _roi(roi), _centerR(centerR), _roiAvail(true), _centerRAvail(true){};
 
-    bool targetDetect(Mat roi, RotatedRect& target, const bool ColorFlag, int mode) const;
-    bool findMillCenter(Mat src, const bool ColorFlag, Point &center) const;
-    double getAngle(const Point& center, const Point& pos, bool unit = RAD) const;
-    double getAngularSpeed(const Point& center, const Point& nowPos, const Point& lastPos, time_t dT, bool unit = RAD) const;
+    bool targetDetect(Mat roi, RotatedRect& target, int mode) const;
+    bool findMillCenter(Mat src, Point2f &center) const;
+    double getAngle(const Point2f& center, const Point2f& pos, bool unit = RAD) const;
+    double getAngularSpeed(const Point2f& center, const Point2f& nowPos, const Point2f& lastPos, time_t dT, bool unit = RAD) const;
     void trimRegion(Mat src, Rect &region) const;
-    Point targetLock(Mat src, const bool ColorFlag, int mode, int SampleSize= 10, double DistanceErr=7.0, double nearbyPercentage = 0.8);
+    Point2f targetLock(Mat src, int mode=0, int SampleSize=10, double DistanceErr=7.0, double nearbyPercentage=0.8);
+
+    // to be added and tested:
+    // predict prePos's position in dt ms
+    Point2f predictIn(Point2f prePos, double dt, int mode = CONSTSPEED);
 
     // 与实现roi设置有关的函数
-    RotatedRect armorDetect(Mat src, const bool ColorFlag) const;
-    Rect centerRoi(Mat src, const bool ColorFlag, Point &center) const;
+    RotatedRect armorDetect(Mat src) const;
+    Rect centerRoi(Mat src, const Point2f &center) const;
 };
 
 float formatAngle(float angle, bool unit)
@@ -74,7 +82,7 @@ float formatAngle(float angle, bool unit)
 }
 
 // 对于wind.mp4 对中心标志R的识别效果很好
-bool MillHiter::findMillCenter(Mat src, const bool ColorFlag, Point &center) const
+bool MillHiter::findMillCenter(Mat src, Point2f &center) const
 {
     if (src.empty())
     {
@@ -86,7 +94,7 @@ bool MillHiter::findMillCenter(Mat src, const bool ColorFlag, Point &center) con
     Mat temp;
 
     /////////// time cost: 0.3 ms //////////
-    if (ColorFlag == BLUE)
+    if (this->_colorFlag == BLUE)
     {
         subtract(splited[0], splited[2], temp);
     }
@@ -134,7 +142,7 @@ void MillHiter::trimRegion(Mat src, Rect &region) const
 
 // 对于wind.mp4 绝大多数帧识别良好，除了用手遮挡的那几帧。同时需要注意，它不能区分已击打和未击打的装甲板
 // 策略：Accuracy first!
-RotatedRect MillHiter::armorDetect(Mat src, const bool ColorFlag) const
+RotatedRect MillHiter::armorDetect(Mat src) const
 {
     if (src.empty())
     {
@@ -145,7 +153,7 @@ RotatedRect MillHiter::armorDetect(Mat src, const bool ColorFlag) const
     split(src, splited);
     Mat temp;
     medianBlur(src, temp, 3);
-    if (ColorFlag == BLUE)
+    if (this->_colorFlag == BLUE)
     {
         subtract(splited[0], splited[2], temp);
     }
@@ -157,13 +165,13 @@ RotatedRect MillHiter::armorDetect(Mat src, const bool ColorFlag) const
     medianBlur(temp, temp, 3);
     threshold(temp, temp, 120, 255, THRESH_BINARY);
     Mat element = getStructuringElement(MORPH_RECT, Size(3,3));
-    morphologyEx(temp, temp, MORPH_CLOSE, element, Point(0,0), 1);
+    morphologyEx(temp, temp, MORPH_CLOSE, element, Point2f(0,0), 1);
 
     vector<vector<Point>> contours;
     vector<Vec4i> hierarchy;
-    Point2i center;
+    Point2f center;
     // findContours only cost 1 ms in my machine (i5-9300H GTX1650)
-    findContours(temp, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0, 0));
+    findContours(temp, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point2f(0, 0));
     vector<int> contour(contours.size()); // all zeros
     for (size_t i = 0; i < contours.size(); i++)
         if (hierarchy[i][3] != -1)
@@ -179,7 +187,7 @@ RotatedRect MillHiter::armorDetect(Mat src, const bool ColorFlag) const
 }
 
 // 对于wind.mp4 roi卡范围的效果很好
-Rect MillHiter::centerRoi(Mat src, const bool ColorFlag, Point &center) const
+Rect MillHiter::centerRoi(Mat src, const Point2f &center) const
 {
     if (src.empty())
     {
@@ -187,14 +195,14 @@ Rect MillHiter::centerRoi(Mat src, const bool ColorFlag, Point &center) const
         return Rect(0, 0, src.cols, src.rows);
     }
     Point2f vertex[4];
-    armorDetect(src, ColorFlag).points(vertex);
-    int armlength = 0;
-    for (const Point &ver : vertex)
+    this->armorDetect(src).points(vertex);
+    double armlength = 0.0;
+    for (const Point2f &ver : vertex)
     {
         armlength = MAX(armlength, sqrt(pow(ver.x - center.x, 2) + pow(ver.y - center.y, 2)) + 20);
         // explanation: add extra number to ensure the calculating error will be offset
     }
-    Rect Roi(center.x - armlength, center.y - armlength, 2 * armlength, 2 * armlength);
+    Rect Roi( int(center.x - armlength), int(center.y - armlength), int(2 * armlength), int(2 * armlength));
     trimRegion(src, Roi);
     return Roi;
 }
@@ -202,7 +210,7 @@ Rect MillHiter::centerRoi(Mat src, const bool ColorFlag, Point &center) const
 // 策略：Efficiency first!
 // mode=0:使用内嵌矩形的方式进行识别。注：预处理图片使用红蓝通道相减，因此ColorFlag的值很重要。
 // mode=1:使用面积比，距离的方式进行识别。注：预处理图片使用亮度（装甲的灯条亮度显著高于周围环境），与ColorFlag的值无关。
-bool MillHiter::targetDetect(Mat roi, RotatedRect& target, const bool ColorFlag, int mode) const
+bool MillHiter::targetDetect(Mat roi, RotatedRect& target, int mode) const
 {
     if (roi.empty())
     {
@@ -215,18 +223,18 @@ bool MillHiter::targetDetect(Mat roi, RotatedRect& target, const bool ColorFlag,
         Mat splited[3];
         split(roi, splited);
 
-        if (ColorFlag == BLUE)  subtract(splited[0], splited[2], gray);
+        if (this->_colorFlag == BLUE)  subtract(splited[0], splited[2], gray);
         else                    subtract(splited[2], splited[0], gray);
         // 通道相减法对 wind.mp4 效果极佳!
 
         Mat element = getStructuringElement(MORPH_RECT, Size(3,3));
-        morphologyEx(gray, gray, MORPH_CLOSE, element, Point(0,0), 1); // 注意：MORPH_CLOSE迭代次数过多会导致矩形选区的偏移（将"1"改为"2"已经产生明显误差了）
+        morphologyEx(gray, gray, MORPH_CLOSE, element, Point2f(0,0), 1); // 注意：MORPH_CLOSE迭代次数过多会导致矩形选区的偏移（将"1"改为"2"已经产生明显误差了）
         threshold(gray, gray, 80, 255, THRESH_BINARY);
         // presume all contours have been closed so far 
 
         vector<vector<Point>> contours;
         vector<Vec4i> hierarchy;
-        findContours(gray, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0,0));
+        findContours(gray, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point2f(0,0));
         vector<int> contour(contours.size()); // all zeros
         for (size_t i = 0; i < contours.size(); i++)
             if (hierarchy[i][3] != -1)
@@ -255,17 +263,17 @@ bool MillHiter::targetDetect(Mat roi, RotatedRect& target, const bool ColorFlag,
         dilate(gray, gray, Mat()); // sometimes 1ms about these two operations
         dilate(gray, gray, Mat());
 
-        floodFill(gray, Point(5, 50), Scalar(255), 0, FLOODFILL_FIXED_RANGE); // around 1ms
+        floodFill(gray, Point2f(5, 50), Scalar(255), 0, FLOODFILL_FIXED_RANGE); // around 1ms
 
         threshold(gray, gray, 80, 255, THRESH_BINARY_INV);
-        vector<vector<Point>> contours;
+        vector<vector<Point2f>> contours;
         findContours(gray, contours, RETR_LIST, CHAIN_APPROX_NONE); // sometimes 1ms
 
         // the "for" loop overall costs 1 ms
         for (size_t i = 0; i < contours.size(); i++)
         {
 
-            vector<Point> points;
+            vector<Point2f> points;
             double area = contourArea(contours[i]);
             if (area < 50 || 1e4 < area)
                 continue;
@@ -282,7 +290,7 @@ bool MillHiter::targetDetect(Mat roi, RotatedRect& target, const bool ColorFlag,
                 for (size_t j = 1; j < contours.size(); j++)
                 {
 
-                    vector<Point> pointsA;
+                    vector<Point2f> pointsA;
                     double area = contourArea(contours[j]);
                     if (area < 50 || 1e4 < area)
                         continue;
@@ -322,13 +330,13 @@ bool MillHiter::targetDetect(Mat roi, RotatedRect& target, const bool ColorFlag,
 
 // 该ROI设置算法对相机参考系与大符参考系的相对静止有严重依赖！！！
 // 对于wind.mp4，ROI设置好后，有一定的优化效果，设置前则每帧耗时5-6ms
-Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode, int SampleSize, double DistanceErr, double nearbyPercentage)
+Point2f MillHiter::targetLock(Mat src, int mode, int SampleSize, double DistanceErr, double nearbyPercentage)
 {
     // preprocess:
     if (src.empty())
     {
         printf("src received by 'targetLock()' is empty\n");
-        return Point();
+        return Point2f();
     }
 
     bool noR = !this->_centerRAvail;
@@ -337,8 +345,8 @@ Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode, int SampleS
     
     else if (noRoi && noR)      // 最初始的状态
     {
-        Point centerNow;
-        if (this->findMillCenter(src, ColorFlag, centerNow))  // 此时findMillCenter 找到了这帧的 R，把该组数据压入 _sampleR中作为有效数据
+        Point2f centerNow;
+        if (this->findMillCenter(src, centerNow))  // 此时findMillCenter 找到了这帧的 R，把该组数据压入 _sampleR中作为有效数据
         {
             this->_sampleR.push_back(centerNow);
             if (_sampleR.size() < SampleSize)   
@@ -376,7 +384,7 @@ Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode, int SampleS
 
     if (noRoi && !noR)  // 不加else是因为可能在此帧拟合出来了R点，如果加了，在这帧，这个分支就会被跳过
     {
-        this->_roi = centerRoi(src, ColorFlag, this->_centerR);              // centerRoi一般会成功，但也有可能失败
+        this->_roi = centerRoi(src, this->_centerR);              // centerRoi一般会成功，但也有可能失败
         if (this->_roi.width == src.cols && this->_roi.height == src.rows)   // 如果出现_roi区域和全图的大小一样，说明这次寻找失败了，设置_roiAvail为false，下次再找
         {
             this->_roiAvail = false;
@@ -389,13 +397,13 @@ Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode, int SampleS
 
     Mat roi = Mat(src, this->_roi);
     RotatedRect target;
-    if (!this->targetDetect(roi, target, ColorFlag, mode))
-        return Point();
-    return Point(target.center.x + this->_roi.x, target.center.y + this->_roi.y);
+    if (!this->targetDetect(roi, target, mode))
+        return Point2f();
+    return Point2f(target.center.x + this->_roi.x, target.center.y + this->_roi.y);
 }
 
 // return degree angle (ranging from -90 to +270)
-inline double MillHiter::getAngle(const Point& center, const Point& pos, bool unit) const
+inline double MillHiter::getAngle(const Point2f& center, const Point2f& pos, bool unit) const
 {
     if (unit == RAD) return atan2(pos.y - center.y, pos.x - center.x);
     else             return RAD2DEG(atan2(pos.y - center.y, pos.x - center.x));
@@ -403,7 +411,7 @@ inline double MillHiter::getAngle(const Point& center, const Point& pos, bool un
 
 // calculate mean angular speed. when "dT" is marginal, it can be used as instant angular velocity
 // if returned value is plus, the mill rotates counter-clockwise. if minus, it rotates clockwise.
-double MillHiter::getAngularSpeed(const Point& center, const Point& nowPos, const Point& lastPos, time_t dT, bool unit) const
+double MillHiter::getAngularSpeed(const Point2f& center, const Point2f& nowPos, const Point2f& lastPos, time_t dT, bool unit) const
 {
     double AngularSpeed;
     double dAngle = this->getAngle(center, nowPos, DEG) - this->getAngle(center, lastPos, DEG);
@@ -420,12 +428,14 @@ double MillHiter::getAngularSpeed(const Point& center, const Point& nowPos, cons
     else             return DEG2RAD(AngularSpeed);
 }
 
+// Point2f MillHiter::predictIn()
+
 int main()
 {
     VideoCapture cap("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind.mp4");
     Mat frame;
     Point2f vertices[4];
-    MillHiter hit;
+    MillHiter hit(BLUE);
     float lastAngle;
  
     for (int i = 0;; i++)
@@ -437,7 +447,7 @@ int main()
         auto start = steady_clock::now();
 
         resize(frame, frame, Size(640, 480));   
-        circle(frame, hit.targetLock(frame, BLUE, 0, 10), 0, Scalar(0,255,0),3);
+        circle(frame, hit.targetLock(frame, 0, 10), 3, Scalar(0,0,255), -1);
 
         // 计时结束
         auto end = steady_clock::now();
@@ -445,7 +455,7 @@ int main()
         printf("time cost: %lf ms\n", duration.count() / 1000.0);
 
         imshow("marked frame", frame);
-        if (waitKey(0) == 'q')
+        if (waitKey(10) == 'q')
             break;
     }
     system("pause");
