@@ -124,4 +124,5 @@ int main()
         if (waitKey(10) == 'q')
             break;
     }
+    system("pause");
 }

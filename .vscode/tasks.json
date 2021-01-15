@@ -21,7 +21,7 @@
                 // "-l", "opencv_shape440"
             ],
             "presentation": {
-                "echo": true,
+                "echo": false,
                 "reveal": "always",
                 "focus": true,
                 "panel": "shared",

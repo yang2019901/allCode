@@ -10,13 +10,19 @@ using namespace chrono;
 
 const bool BLUE = false;
 const bool RED = true;
+const bool DEG = false;
+const bool RAD = true;
 
 #ifndef PI
 #define PI 3.1415927
 #endif
 
-#ifndef Rad2Deg
-#define Rad2Deg 57.295779513
+#ifndef RAD2DEG
+#define RAD2DEG(rad) ((rad) * 180 / PI) 
+#endif
+
+#ifndef DEG2RAD
+#define DEG2RAD(deg) ((deg) * PI / 180)
 #endif
 
 #define TIMING true
@@ -36,16 +42,36 @@ public:
     MillHiter():_roiAvail(false), _centerRAvail(false){};
     MillHiter(Rect roi, Point centerR): _roi(roi), _centerR(centerR), _roiAvail(true), _centerRAvail(true){};
 
+    bool targetDetect(Mat roi, RotatedRect& target, const bool ColorFlag, int mode) const;
     bool findMillCenter(Mat src, const bool ColorFlag, Point &center) const;
+    double getAngle(const Point& center, const Point& pos, bool unit = RAD) const;
+    double getAngularSpeed(const Point& center, const Point& nowPos, const Point& lastPos, time_t dT, bool unit = RAD) const;
     void trimRegion(Mat src, Rect &region) const;
+    Point targetLock(Mat src, const bool ColorFlag, int mode, int SampleSize= 10, double DistanceErr=7.0, double nearbyPercentage = 0.8);
+
+    // 与实现roi设置有关的函数
     RotatedRect armorDetect(Mat src, const bool ColorFlag) const;
     Rect centerRoi(Mat src, const bool ColorFlag, Point &center) const;
-    RotatedRect targetDetect(Mat roi, const bool ColorFlag, int mode) const;
-    Point targetLock(Mat src, const bool ColorFlag, int mode, int SampleSize= 10, double DistanceErr=7.0, double nearbyPercentage = 0.8);
-    double getAngle(const Point& center, const Point& pos) const;
-    double getAngularSpeed(const Point& center, const Point& nowPos, const Point& lastPos, time_t dT) const;
-    
 };
+
+float formatAngle(float angle, bool unit)
+{
+    if (unit == DEG)
+    {
+        if (fabs(angle) < 180)  return angle;
+        else if (fabs(angle + 360) < 180) return angle + 360;
+        else if (fabs(angle - 360) < 180) return angle - 360;
+        return angle;
+    }
+    else if (unit == RAD)
+    {
+        if (fabs(angle) < PI)  return angle;
+        else if (fabs(angle + 2 * PI) < PI) return angle + 2 * PI;
+        else if (fabs(angle - 2 * PI) < PI) return angle - 2 * PI;
+        return angle;
+    }
+    return angle;
+}
 
 // 对于wind.mp4 对中心标志R的识别效果很好
 bool MillHiter::findMillCenter(Mat src, const bool ColorFlag, Point &center) const
@@ -58,6 +84,8 @@ bool MillHiter::findMillCenter(Mat src, const bool ColorFlag, Point &center) con
     vector<Mat> splited;
     split(src, splited);
     Mat temp;
+
+    /////////// time cost: 0.3 ms //////////
     if (ColorFlag == BLUE)
     {
         subtract(splited[0], splited[2], temp);
@@ -66,6 +94,8 @@ bool MillHiter::findMillCenter(Mat src, const bool ColorFlag, Point &center) con
     {
         subtract(splited[2], splited[0], temp);
     }
+    ////////////////////////////////////////
+
     threshold(temp, temp, 150, 255, THRESH_BINARY);
     dilate(temp, temp, Mat());
     dilate(temp, temp, Mat());
@@ -172,12 +202,12 @@ Rect MillHiter::centerRoi(Mat src, const bool ColorFlag, Point &center) const
 // 策略：Efficiency first!
 // mode=0:使用内嵌矩形的方式进行识别。注：预处理图片使用红蓝通道相减，因此ColorFlag的值很重要。
 // mode=1:使用面积比，距离的方式进行识别。注：预处理图片使用亮度（装甲的灯条亮度显著高于周围环境），与ColorFlag的值无关。
-RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode) const
+bool MillHiter::targetDetect(Mat roi, RotatedRect& target, const bool ColorFlag, int mode) const
 {
     if (roi.empty())
     {
         printf("roi received by 'targetDetect()' is empty\n");
-        return RotatedRect();
+        return false;
     }
     if (mode == 0)
     {
@@ -205,14 +235,15 @@ RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode) con
         {
             if (contour[i] == 1 || contour[i] == 2)
             {
-                int target = hierarchy[i][2];   
-                if (contourArea(contours[target]) <= 25)
+                int targetNum = hierarchy[i][2];   
+                if (contourArea(contours[targetNum]) <= 25)
                     continue;
                 // else: presume "target" is truely what we are looking for
-                return minAreaRect(contours[target]);
+                target = minAreaRect(contours[targetNum]);
+                return true;
             }
         }
-        return RotatedRect();
+        return false;
     }
     else if (mode == 1)
     {
@@ -272,22 +303,25 @@ RotatedRect MillHiter::targetDetect(Mat roi, const bool ColorFlag, int mode) con
                     }
                 }
                 if (middle > 60)
-                    return rrect;
+                {
+                    target = rrect;
+                    return true;
+                }
             }
         }
-        return RotatedRect();
+        return false;
     }
 
     // else: set mode wrong 
     else
     {
         printf("no such mode");
-        return RotatedRect();
+        return false;
     }
 }
 
 // 该ROI设置算法对相机参考系与大符参考系的相对静止有严重依赖！！！
-// 对于wind.mp4，ROI设置好后，有一定的优化效果，设置前则每帧耗时9-10ms
+// 对于wind.mp4，ROI设置好后，有一定的优化效果，设置前则每帧耗时5-6ms
 Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode, int SampleSize, double DistanceErr, double nearbyPercentage)
 {
     // preprocess:
@@ -354,81 +388,64 @@ Point MillHiter::targetLock(Mat src, const bool ColorFlag, int mode, int SampleS
     }
 
     Mat roi = Mat(src, this->_roi);
-    RotatedRect target = this->targetDetect(roi, ColorFlag, mode);
+    RotatedRect target;
+    if (!this->targetDetect(roi, target, ColorFlag, mode))
+        return Point();
     return Point(target.center.x + this->_roi.x, target.center.y + this->_roi.y);
 }
 
-// return Radian angle (ranging from -PI/2 to 3PI/2)
-double MillHiter::getAngle(const Point& center, const Point& pos) const
+// return degree angle (ranging from -90 to +270)
+inline double MillHiter::getAngle(const Point& center, const Point& pos, bool unit) const
 {
-    double dy = pos.y - center.y;
-    double dx = pos.x - center.x;
-    double rlt = atan(dy / dx);
-    if (dx < 0)
-        return rlt + PI;
-    else 
-        return rlt;
-}
+    if (unit == RAD) return atan2(pos.y - center.y, pos.x - center.x);
+    else             return RAD2DEG(atan2(pos.y - center.y, pos.x - center.x));
+} 
 
 // calculate mean angular speed. when "dT" is marginal, it can be used as instant angular velocity
 // if returned value is plus, the mill rotates counter-clockwise. if minus, it rotates clockwise.
-double MillHiter::getAngularSpeed(const Point& center, const Point& nowPos, const Point& lastPos, time_t dT) const
+double MillHiter::getAngularSpeed(const Point& center, const Point& nowPos, const Point& lastPos, time_t dT, bool unit) const
 {
-    double dAngle = this->getAngle(center, nowPos) - this->getAngle(center, lastPos);
+    double AngularSpeed;
+    double dAngle = this->getAngle(center, nowPos, DEG) - this->getAngle(center, lastPos, DEG);
     // Presumption with reason: because dT is small, dAngle must be small(smaller than 180 degree)
-    if (fabs(dAngle) < PI)
-        return dAngle / dT;
+    if (fabs(dAngle) < 180)
+        AngularSpeed = dAngle / dT;
     else
     {
-        if (fabs(dAngle + 2 * PI) < PI)
-            return (dAngle + 2 * PI) / dT;
-        else return (dAngle - 2 * PI) / dT;
+        if (fabs(dAngle + 360) < 180)
+            AngularSpeed = (dAngle + 360) / dT;
+        else AngularSpeed = (dAngle - 360) / dT;
     } 
+    if (unit == DEG) return AngularSpeed;
+    else             return DEG2RAD(AngularSpeed);
 }
 
 int main()
 {
     VideoCapture cap("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind.mp4");
     Mat frame;
-    // frame = imread("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind4.jpg");
     Point2f vertices[4];
     MillHiter hit;
-    while (true)
+    float lastAngle;
+ 
+    for (int i = 0;; i++)
     {
         cap >> frame;
         if (frame.empty())
             break;
+        // 计时开始，读图在另一个线程，只算处理图片的时间
         auto start = steady_clock::now();
-        resize(frame, frame, Size(640, 480));
 
-        // ///// 以下注释是设置roi的代码，耗时比较长，但是只用在最开始的几帧（目前targetLock函数默认设置的是10帧）找，后面就都在roi里进行了
-        // ///// 在单次击打过程中，roi固定为整个大风车的区域（注意不是单个扇叶），代码待编写，效果待测试··· -----> 有一定的效果
-        // Point center;
-        // Rect Roi(0,0,frame.cols,frame.rows);
-        // if (hit.findMillCenter(frame, BLUE, center))
-        // { 
-        //     circle(frame, center, 0, Scalar(0, 255, 255), 5);
-        //     Roi = hit.centerRoi(frame, BLUE, center);
-        //     rectangle(frame, Roi, Scalar(255,0,255),2);
-        // }
-        // Mat roi = Mat(frame, Roi);
-        // ////// roi设置结束 ////////////////////////////////////////////////////////////////////////////////////
+        resize(frame, frame, Size(640, 480));   
+        circle(frame, hit.targetLock(frame, BLUE, 0, 10), 0, Scalar(0,255,0),3);
 
-        // 在全图中寻找待击打扇叶
-        RotatedRect target = hit.targetDetect(frame, BLUE, 1);
-        target.points(vertices);
-        for (int i = 0; i < 4; i++)
-        {
-            line(frame, vertices[i], vertices[(i+1)%4], Scalar(0,255,255), 2);
-        }
-
-        // circle(frame, hit.targetLock(frame, BLUE, 0), 0, Scalar(0,255,255), 5);
-
+        // 计时结束
         auto end = steady_clock::now();
         auto duration = duration_cast<microseconds>(end - start);
         printf("time cost: %lf ms\n", duration.count() / 1000.0);
+
         imshow("marked frame", frame);
-        if (waitKey(10) == 'q')
+        if (waitKey(0) == 'q')
             break;
     }
     system("pause");
