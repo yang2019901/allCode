@@ -12,8 +12,9 @@ const bool BLUE = false;
 const bool RED = true;
 const bool DEG = false;
 const bool RAD = true;
-const int CONSTSPEED = 0;
-const int SINSPEED = 1;
+const int CONSTMODE = 0;    // 小能量机关模式
+const int SINMODE = 1;      // 大能量机关模式
+const int CONSTSPEED = 60;  // 小能量机关模式下，机关旋转的角速度。单位: deg/s   
 
 #ifndef PI
 #define PI 3.1415927
@@ -35,31 +36,32 @@ class MillHiter
 {
 protected:
     Rect _roi;                  // 矩形区域 ROI （如果已经找到的话）
-    Point2f _centerR;             // 中心点 R 的坐标 （如果已经找到的话）
-    vector<Point2f> _sampleR;     // 取“聚点”作为大风车中心点的坐标
+    Point2f _centerR;           // 中心点 R 的坐标 （如果已经找到的话）
+    vector<Point2f> _sampleR;   // 取“聚点”作为大风车中心点的坐标
     bool _roiAvail;             // ROI是否有效（找到）
     bool _centerRAvail;         // 中心点R坐标是否有效（找到）
     bool _colorFlag;
 
 public:
-    MillHiter() : _roiAvail(false), _centerRAvail(false){};
+    /* 取消默认构造函数，如果没有colorFlag（也即不输入打哪种颜色的装甲），就报错，终止运行 */
+    // MillHiter() : _roiAvail(false), _centerRAvail(false), _colorFlag(BLUE){};
     MillHiter(bool colorFlag) : _colorFlag(colorFlag), _roiAvail(false), _centerRAvail(false){};
-    MillHiter(Rect roi, Point2f centerR): _roi(roi), _centerR(centerR), _roiAvail(true), _centerRAvail(true){};
+    MillHiter(Rect roi, Point2f centerR, bool colorFlag): _roi(roi), _centerR(centerR), _roiAvail(true), _centerRAvail(true), _colorFlag(colorFlag){};
 
-    bool targetDetect(Mat roi, RotatedRect& target, int mode) const;
+    bool targetDetect(Mat roi, RotatedRect& target, int mode);
+    Point2f targetLock(Mat src, int mode=0, int SampleSize=10, double DistanceErr=7.0, double nearbyPercentage=0.8);
     bool findMillCenter(Mat src, Point2f &center) const;
     double getAngle(const Point2f& center, const Point2f& pos, bool unit = RAD) const;
     double getAngularSpeed(const Point2f& center, const Point2f& nowPos, const Point2f& lastPos, time_t dT, bool unit = RAD) const;
     void trimRegion(Mat src, Rect &region) const;
-    Point2f targetLock(Mat src, int mode=0, int SampleSize=10, double DistanceErr=7.0, double nearbyPercentage=0.8);
 
     // to be added and tested:
     // predict prePos's position in dt ms
-    Point2f predictIn(Point2f prePos, double dt, int mode = CONSTSPEED);
+    bool predictIn(const Point2f& prePos, Point2f& postPos, double dt, int mode = CONSTMODE);
 
     // 与实现roi设置有关的函数
     RotatedRect armorDetect(Mat src) const;
-    Rect centerRoi(Mat src, const Point2f &center) const;
+    Rect centerRoi(Mat src, const Point2f &center);
 };
 
 float formatAngle(float angle, bool unit)
@@ -187,7 +189,7 @@ RotatedRect MillHiter::armorDetect(Mat src) const
 }
 
 // 对于wind.mp4 roi卡范围的效果很好
-Rect MillHiter::centerRoi(Mat src, const Point2f &center) const
+Rect MillHiter::centerRoi(Mat src, const Point2f &center)
 {
     if (src.empty())
     {
@@ -210,7 +212,7 @@ Rect MillHiter::centerRoi(Mat src, const Point2f &center) const
 // 策略：Efficiency first!
 // mode=0:使用内嵌矩形的方式进行识别。注：预处理图片使用红蓝通道相减，因此ColorFlag的值很重要。
 // mode=1:使用面积比，距离的方式进行识别。注：预处理图片使用亮度（装甲的灯条亮度显著高于周围环境），与ColorFlag的值无关。
-bool MillHiter::targetDetect(Mat roi, RotatedRect& target, int mode) const
+bool MillHiter::targetDetect(Mat roi, RotatedRect& target, int mode)
 {
     if (roi.empty())
     {
@@ -224,17 +226,17 @@ bool MillHiter::targetDetect(Mat roi, RotatedRect& target, int mode) const
         split(roi, splited);
 
         if (this->_colorFlag == BLUE)  subtract(splited[0], splited[2], gray);
-        else                    subtract(splited[2], splited[0], gray);
+        else                           subtract(splited[2], splited[0], gray);
         // 通道相减法对 wind.mp4 效果极佳!
 
         Mat element = getStructuringElement(MORPH_RECT, Size(3,3));
-        morphologyEx(gray, gray, MORPH_CLOSE, element, Point2f(0,0), 1); // 注意：MORPH_CLOSE迭代次数过多会导致矩形选区的偏移（将"1"改为"2"已经产生明显误差了）
-        threshold(gray, gray, 80, 255, THRESH_BINARY);
+        morphologyEx(gray, gray, MORPH_CLOSE, element, Point(0,0), 1); // 注意：MORPH_CLOSE迭代次数过多会导致矩形选区的偏移（将"1"改为"2"已经产生明显误差了）
+        threshold(gray, gray, 80, 255, THRESH_BINARY);                 // TODO: 灰度阈值也是要调的
         // presume all contours have been closed so far 
 
         vector<vector<Point>> contours;
         vector<Vec4i> hierarchy;
-        findContours(gray, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point2f(0,0));
+        findContours(gray, contours, hierarchy, RETR_TREE, CHAIN_APPROX_SIMPLE, Point(0,0));
         vector<int> contour(contours.size()); // all zeros
         for (size_t i = 0; i < contours.size(); i++)
             if (hierarchy[i][3] != -1)
@@ -266,18 +268,16 @@ bool MillHiter::targetDetect(Mat roi, RotatedRect& target, int mode) const
         floodFill(gray, Point2f(5, 50), Scalar(255), 0, FLOODFILL_FIXED_RANGE); // around 1ms
 
         threshold(gray, gray, 80, 255, THRESH_BINARY_INV);
-        vector<vector<Point2f>> contours;
+        vector<vector<Point>> contours;
         findContours(gray, contours, RETR_LIST, CHAIN_APPROX_NONE); // sometimes 1ms
 
         // the "for" loop overall costs 1 ms
         for (size_t i = 0; i < contours.size(); i++)
         {
-
-            vector<Point2f> points;
+            vector<Point> points;
             double area = contourArea(contours[i]);
             if (area < 50 || 1e4 < area)
                 continue;
-            // drawContours(gray, contours, static_cast<int>(i), Scalar(0), 2);
             points = contours[i];
             RotatedRect rrect = fitEllipse(points);
             Point2f *vertices = new Point2f[4];
@@ -290,7 +290,7 @@ bool MillHiter::targetDetect(Mat roi, RotatedRect& target, int mode) const
                 for (size_t j = 1; j < contours.size(); j++)
                 {
 
-                    vector<Point2f> pointsA;
+                    vector<Point> pointsA;
                     double area = contourArea(contours[j]);
                     if (area < 50 || 1e4 < area)
                         continue;
@@ -427,8 +427,34 @@ double MillHiter::getAngularSpeed(const Point2f& center, const Point2f& nowPos, 
     if (unit == DEG) return AngularSpeed;
     else             return DEG2RAD(AngularSpeed);
 }
-
-// Point2f MillHiter::predictIn()
+ 
+bool MillHiter::predictIn(const Point2f& prePos, Point2f& postPos, double dt, int mode)
+{
+    /*  dt: ms  CONSTSPEED: deg/s  */
+    if (mode == CONSTMODE)
+    {
+        /* put prediction code of constant-speed-motion here */
+        if (!this->_centerRAvail) { printf("center R is needed to predict\n");  return false; }
+        else 
+        {
+            double dAngle = CONSTSPEED * (dt / 1000);  
+            dAngle = DEG2RAD(dAngle);
+            postPos.x = this->_centerR.x + (prePos.x - this->_centerR.x) * cos(dAngle) - (prePos.y - this->_centerR.y) * sin(dAngle);
+            postPos.y = this->_centerR.y + (prePos.x - this->_centerR.x) * sin(dAngle) + (prePos.y - this->_centerR.y) * cos(dAngle);
+            return true;
+        }
+    }
+    else if(mode == SINMODE)
+    {
+        /* put prediction code of sine-motion here  */
+        return false;
+    }   
+    else 
+    {
+        cout << "wrong mode\n";
+        return false;
+    }
+}
 
 int main()
 {
@@ -446,8 +472,13 @@ int main()
         // 计时开始，读图在另一个线程，只算处理图片的时间
         auto start = steady_clock::now();
 
-        resize(frame, frame, Size(640, 480));   
-        circle(frame, hit.targetLock(frame, 0, 10), 3, Scalar(0,0,255), -1);
+        resize(frame, frame, Size(640, 480));  
+
+        Point2f prePos = hit.targetLock(frame, 1, 10); 
+        Point2f postPos;
+        circle(frame, prePos, 3, Scalar(0, 0, 255), -1);
+        hit.predictIn(prePos, postPos, 500, CONSTMODE);
+        circle(frame, postPos, 3, Scalar(0, 255, 0), -1);
 
         // 计时结束
         auto end = steady_clock::now();
@@ -455,8 +486,9 @@ int main()
         printf("time cost: %lf ms\n", duration.count() / 1000.0);
 
         imshow("marked frame", frame);
-        if (waitKey(10) == 'q')
+        if (waitKey(0) == 'q')
             break;
+
     }
     system("pause");
 }
