@@ -19,8 +19,8 @@ const int SINMODE = 1;      // 大能量机关模式
 const int CONSTSPEED = 60;  // 小能量机关模式下，机关旋转的角速度。单位: deg/s   
 
 const int UNKNOWN = 0;
-const int COUNTERCLOCKWISE = 1;
-const int CLOCKWISE = -1;
+const int CLOCKWISE = 1;    // 注意方向，由于图片坐标系的x轴不变而y轴反向，故在极坐标系下参考方向也反向，变为顺时针。
+const int COUNTERCLOCKWISE = -1;        
 
 #ifndef PI
 #define PI 3.1415927
@@ -51,22 +51,20 @@ protected:
     bool _colorFlag;            // 要击打的能量机关的颜色
     int _spinDir;               // 能量机关旋转的方向
 
-public:
+public: 
     /* 取消默认构造函数，如果没有colorFlag（也即不输入打哪种颜色的装甲），就报错，终止运行 */
     // MillHiter() : _roiAvail(false), _centerRAvail(false), _colorFlag(BLUE), _spinDir(UNKNOWN){};
     MillHiter(bool colorFlag) : _colorFlag(colorFlag), _roiAvail(false), _centerRAvail(false), _spinDir(UNKNOWN){};
     MillHiter(Rect roi, Point2f centerR, bool colorFlag): _roi(roi), _centerR(centerR), _roiAvail(true), _centerRAvail(true), _colorFlag(colorFlag), _spinDir(UNKNOWN){};
 
+    bool init(Mat src, int mode = 1, uint dotSampleSize = 10, double DistanceErr = 7.0, double nearbyPercentage = 0.8, uint angleSampleSize = 5);
     bool targetDetect(Mat roi, RotatedRect& target, int mode);
     bool targetLock(Mat src, Point2f& aim, int mode=0, int SampleSize=10, double DistanceErr=7.0, double nearbyPercentage=0.8);
     bool findMillCenter(Mat src, Point2f &center) const;
     double getAngle(const Point2f& center, const Point2f& pos, bool unit = RAD) const;
     double getAngularSpeed(const Point2f& center, const Point2f& nowPos, const Point2f& lastPos, time_t dT, bool unit = RAD) const;
     void trimRegion(Mat src, Rect &region) const;
-
-    // to be added and tested:
-    // predict prePos's position in dt ms
-    bool predictIn(const Point2f& prePos, Point2f& postPos, double dt, int mode = CONSTMODE);
+    bool predictIn(const Point2f &prePos, Point2f &postPos, double dt, int mode = CONSTMODE); // to predict prePos's position in dt ms
 
     // 与实现roi设置有关的函数
     RotatedRect armorDetect(Mat src) const;
@@ -340,6 +338,7 @@ bool MillHiter::targetDetect(Mat roi, RotatedRect& target, int mode)
 
 // 该ROI设置算法对相机参考系与大符参考系的相对静止有严重依赖！！！
 // 对于wind.mp4，ROI设置好后，有一定的优化效果，设置前则每帧耗时5-6ms
+// 显然，如果已经过类中的初始化函数MillHiter::init()初始化，那么MillHiter::targetLock()的耗时就会很短，只是做了一个在ROI中识别的工作
 bool MillHiter::targetLock(Mat src, Point2f& aim, int mode, int SampleSize, double DistanceErr, double nearbyPercentage)
 {
     // preprocess:
@@ -449,7 +448,7 @@ bool MillHiter::predictIn(const Point2f& prePos, Point2f& postPos, double dt, in
         if (!this->_centerRAvail) { /* printf("center R is needed to predict\n"); */  return false; }
         else 
         {
-            double dAngle = CONSTSPEED * (dt / 1000);  
+            double dAngle = CONSTSPEED * (dt / 1000) * this->_spinDir;  
             dAngle = DEG2RAD(dAngle);
             postPos.x = this->_centerR.x + (prePos.x - this->_centerR.x) * cos(dAngle) - (prePos.y - this->_centerR.y) * sin(dAngle);
             postPos.y = this->_centerR.y + (prePos.x - this->_centerR.x) * sin(dAngle) + (prePos.y - this->_centerR.y) * cos(dAngle);
@@ -468,13 +467,91 @@ bool MillHiter::predictIn(const Point2f& prePos, Point2f& postPos, double dt, in
     }
 }
 
+bool MillHiter::init(Mat src, int mode, uint dotSampleSize, double DistanceErr, double nearbyPercentage, uint angleSampleSize)
+{
+    if (src.empty())
+    {
+        printf("src received by \'targetLock()\' is empty\n");
+        return false;
+    }
+
+    bool noR = !this->_centerRAvail;                    
+    bool unknownDir = (this->_spinDir == UNKNOWN);      
+    bool noRoi = !this->_roiAvail;                      
+    if (noR) // 最初始的状态
+    {
+        Point2f centerNow;
+        if (this->findMillCenter(src, centerNow)) // 此时findMillCenter 找到了这帧的 R，把该组数据压入 _sampleR中作为有效数据
+        {
+            this->_sampleR.push_back(centerNow);
+            if (_sampleR.size() >= dotSampleSize) // 如果_sample.size() 已经达到SampleSize（取了一个不大不小的值 10 作为样本容量的默认值），就开始拟合中心。策略：把偏差过大的点舍去，取“聚点”
+            {
+                for (int i = 0; i < dotSampleSize; i++)
+                {
+                    int neighborNum = 1; // 该点和它本身距离为0，足够小，故临近点个数初始化为1，子循环遍历从第i+1个开始
+                    for (int j = i + 1; j < dotSampleSize; j++)
+                        if (DISTANCE(this->_sampleR[i], this->_sampleR[j]) < DistanceErr) // 注意：这里的误差是需要调节的，此处草率地预设为 7.0
+                            neighborNum++;
+                    if (double(neighborNum) / dotSampleSize >= nearbyPercentage) // 有超过nearbyPercentage的点聚集在该点的周围，可以认为该点就是“聚点”
+                    {
+                        this->_centerRAvail = true;
+                        this->_centerR = this->_sampleR[i];
+                        noR = false;
+                        break;   // 找到R后，跳出循环，进行后续的_roi和_spinDir的寻找
+                    }
+                    if (i == dotSampleSize) // 遍历至此，还不退出，这说明没有点是聚点，所以清空所有样本数据，重测
+                    {
+                        this->_sampleR.clear();
+                        return false;
+                    }
+                }
+            }
+        }
+        return false;  // 由于没有centerR时，什么也干不了，故直接返回false
+    }
+    
+    // 中心已找到，this->_centerR已初始化
+    if (!noR && unknownDir)
+    {
+        RotatedRect target;
+        if (this->targetDetect(src, target, mode))
+        {
+            this->_angle.push_back(this->getAngle(this->_centerR, target.center, DEG));
+            if (this->_angle.size() >= angleSampleSize)
+            {
+                int n = this->_angle.size();
+                float dAngle = formatAngle(this->_angle[n - 1] - this->_angle[0], DEG);    // 这里假设了最后一帧的角度和第一帧的角度相差不超过 180 deg（实际上用的帧数是很少的，结合大风车的速度，不可能到180 deg）。
+                if (dAngle > 0)     // 按参考方向旋转，即顺时针
+                    this->_spinDir = CLOCKWISE;
+                else 
+                    this->_spinDir = COUNTERCLOCKWISE;  
+            }
+        }
+    }
+
+    // 与判断机关旋转方向是同步执行的
+    if (!noR && noRoi) // 不加else是因为可能在此帧拟合出来了R点，如果加了，在这帧，这个分支就会被跳过
+    {
+        this->_roi = centerRoi(src, this->_centerR);                       // centerRoi一般会成功，但也有可能失败
+        if (this->_roi.width == src.cols && this->_roi.height == src.rows) // 如果出现_roi区域和全图的大小一样，说明这次寻找失败了，设置_roiAvail为false，下次再找
+        {
+            this->_roiAvail = false;
+        }
+        else
+        {
+            this->_roiAvail = true;
+        }
+    }
+    
+    if (this->_roiAvail && this->_centerRAvail && this->_spinDir != UNKNOWN) return true;
+    return false;
+} 
+
 int main()
 {
     VideoCapture cap("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind.mp4");
     Mat frame;
-    Point2f vertices[4];
     MillHiter hit(BLUE);
-    float lastAngle;
  
     for (int i = 0;; i++)
     {
@@ -484,17 +561,20 @@ int main()
         // 计时开始，读图在另一个线程，只算处理图片的时间
         auto start = steady_clock::now();
 
-        resize(frame, frame, Size(640, 480));  
+        resize(frame, frame, Size(640, 480));
+
+        if (!hit.init(frame)) // 使用默认设置
+            continue;    
 
         Point2f prePos; 
         Point2f postPos;
-        if (!hit.targetLock(frame, prePos, 1, 10))
+        if (!hit.targetLock(frame, prePos, 0, 10))
             continue;
 
         circle(frame, prePos, 3, Scalar(0, 0, 255), -1);
 
-        if(hit.predictIn(prePos, postPos, 200, CONSTMODE))
-            circle(frame, postPos, 2, Scalar(0, 255, 0), -1);
+        if(hit.predictIn(prePos, postPos, 500, CONSTMODE))
+            circle(frame, postPos, 3, Scalar(0, 255, 0), -1);
 
         // 计时结束
         auto end = steady_clock::now();
