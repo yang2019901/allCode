@@ -206,4 +206,5 @@ int main()
     resize(img, img, Size(960, 540));
     Test2(img);
     system("pause");
-    return 0; }
+    return 0; 
+}

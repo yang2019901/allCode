@@ -444,7 +444,6 @@ bool MillHiter::predictIn(const Point2f& prePos, Point2f& postPos, double dt, in
     /*  dt: ms  CONSTSPEED: deg/s  */
     if (mode == CONSTMODE)
     {
-        /* put prediction code of constant-speed-motion here */
         if (!this->_centerRAvail) { /* printf("center R is needed to predict\n"); */  return false; }
         else 
         {
@@ -549,7 +548,7 @@ bool MillHiter::init(Mat src, int mode, uint dotSampleSize, double DistanceErr, 
 
 int main()
 {
-    VideoCapture cap("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind.mp4");
+    VideoCapture cap("C:/Users/Lenovo/Desktop/VScode/Windmills-TEST/wind(r).mp4");
     Mat frame;
     MillHiter hit(BLUE);
  
