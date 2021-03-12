@@ -25,7 +25,8 @@
     "code-runner.customCommand": "-std=c++11",
     "cmake.configureOnOpen": false,
     "files.associations": {
-        "dense": "cpp"
+        "dense": "cpp",
+        "fstream": "cpp"
     },
     // "C_Cpp.errorSquiggles": "Enabled",
     // "files.associations": {
