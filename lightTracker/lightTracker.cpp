@@ -107,6 +107,7 @@ int main()
     
     fin.close();
 
+    printf("f': %f\n", h / u_);
     printf("----------program ends----------\n");
 
     system("pause");
