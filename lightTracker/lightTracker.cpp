@@ -1,3 +1,11 @@
+/*******************************************************************
+ * @file            : lightTracker.cpp
+ * @brief           : to track the parallel incident light
+ * @author          : Yang Ming
+ * @email           : 1308592371@qq.com
+ * @version         : 1.0.0
+ * @license         : GNU General Public License (GPL)
+ *******************************************************************/
 #include <iostream>
 #include <fstream>
 #include <cmath>
@@ -37,6 +45,8 @@ void transmit(double d)
 int main()
 {
     ifstream fin;
+
+    /* To change this relative path to absolute path can also work */
     fin.open("./params.txt");
 
     if (!fin)
@@ -57,21 +67,14 @@ int main()
         {
             double d;
             fin >> r_left >> r_right >> d >> n_;
-
-            if (fin.eof())
-            {
-                cerr << "error: unable to load the first lens's parameters.\nPlease check the availablity of it.\n";
-                break;
-            }
             
             l_ = n_ * r_left / (n_ - n);
-            // u_ = asin(h / r_left) * r_left / l_;  
             u_ = h / l_;
             
             output(l_, u_);
 
             transmit(d);
-            /* swap the value of n & n_(AKA n') */
+
             swap(n, n_);
 
             calculate(r_right);
@@ -84,12 +87,6 @@ int main()
             double d1, d2;
             fin >> r_left >> d1;
             fin >> r_right >> d2 >> n_;
-
-            if (fin.eof())
-            {
-                cerr << "error: unable to load the lens-" << i+1 << "'s parameters.\nplease check the availablity of it.\n";
-                break;
-            }
 
             transmit(d1);
 
@@ -109,6 +106,8 @@ int main()
     }
     
     fin.close();
+
+    printf("----------program ends----------\n");
 
     system("pause");
     return 0;
